@@ -448,7 +448,7 @@ async function procesarScanAhora(base64, mediaType, ses){
     });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "no se pudo leer la nota");
-    procesarNotaEscaneada(j.datos || {});
+    procesarNotaEscaneada(j.datos || {}, {base64, mediaType});
   }catch(err){
     aviso("No se pudo escanear: "+(err.message||"intenta de nuevo"),"err",6000);
   }
@@ -526,7 +526,7 @@ async function revisarScanPendiente(row){
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "no se pudo leer la nota");
     if(sb) await sb.from("scans_pendientes").update({estado:"revisado"}).eq("id", row.id);
-    procesarNotaEscaneada(j.datos || {});
+    procesarNotaEscaneada(j.datos || {}, {base64, mediaType: blob.type || "image/jpeg"});
   }catch(err){
     aviso("No se pudo procesar: "+(err.message||"intenta de nuevo"),"err",6000);
   }
@@ -536,7 +536,7 @@ function textoItemScan(i){
   const partes = [];
   const cantTxt = i.cantidadTexto!=null ? i.cantidadTexto : (i.cantidad!=null?numBonito(i.cantidad):null);
   if(cantTxt!=null) partes.push(cantTxt+(i.unidad?" "+i.unidad:""));
-  partes.push(i.descripcion || "artículo");
+  partes.push(i.descripcionTexto || "artículo");
   if(i.importe!=null) partes.push("$"+numBonito(i.importe));
   return (i.revisar?"⚠️ ":"")+partes.join(" ");
 }
@@ -563,78 +563,122 @@ function capParaProducto(prod, cantidad){
   return {modo:"unidad", cantidad: Number(cantidad)||0};
 }
 
-/* búsqueda difusa contra tus clientes guardados — a propósito más estricta que la
-   de productos: solo sugiere si hay coincidencia clara (nombre completo o
-   teléfono exacto), nunca por una sola palabra suelta. La app SIEMPRE deja el
-   nombre editable y jamás asigna el cliente sin que tú lo confirmes. */
-function emparejarCliente(datos){
-  const nombre = datos && datos.contraparte;
-  const telefono = datos && datos.contraparteTelefono ? String(datos.contraparteTelefono).replace(/\D/g,"") : "";
-  if(!nombre && !telefono) return null;
-  const sinAcentos = s => normaliza(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
-  const n = nombre ? sinAcentos(nombre) : "";
-  let mejor = null, mejorPuntaje = 0;
-  D.customers.forEach(c=>{
-    let puntaje = 0;
-    if(telefono && c.phone && String(c.phone).replace(/\D/g,"") === telefono) puntaje = 4;
-    const nc = sinAcentos(c.displayName||"");
-    if(n && nc){
-      if(nc === n) puntaje = Math.max(puntaje, 3);
-      else if(n.length>3 && (nc.includes(n) || n.includes(nc))) puntaje = Math.max(puntaje, 2);
+/* distancia de edición (Levenshtein) para dar un % de coincidencia real,
+   no solo "se parece / no se parece" */
+function distanciaEdicion(a, b){
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  const fila = new Array(n+1);
+  for(let j=0;j<=n;j++) fila[j]=j;
+  for(let i=1;i<=m;i++){
+    let anterior = fila[0]; fila[0]=i;
+    for(let j=1;j<=n;j++){
+      const temp = fila[j];
+      fila[j] = a[i-1]===b[j-1] ? anterior : 1+Math.min(anterior, fila[j], fila[j-1]);
+      anterior = temp;
     }
-    if(puntaje > mejorPuntaje){ mejorPuntaje = puntaje; mejor = c; }
+  }
+  return fila[n];
+}
+function porcentajeSimilitud(a, b){
+  const sinAcentos = s => normaliza(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const x = sinAcentos(a||""), y = sinAcentos(b||"");
+  if(!x || !y) return 0;
+  if(x === y) return 100;
+  const corto = x.length <= y.length ? x : y;
+  const largo = x.length <= y.length ? y : x;
+  if(corto.length >= 3 && largo.includes(corto)){
+    // ej. nota dice "Rogelio", cliente guardado es "Rogelio Martínez" — es
+    // el mismo nombre, solo incompleto, no un nombre distinto que casualmente
+    // se parece; la distancia de edición pura castigaría esto de más.
+    const cobertura = corto.length / largo.length;
+    return Math.round(60 + cobertura*40);
+  }
+  const dist = distanciaEdicion(x, y);
+  const maxLen = Math.max(x.length, y.length);
+  return maxLen ? Math.round((1 - dist/maxLen) * 100) : 0;
+}
+
+/* búsqueda difusa contra tus clientes guardados. SIEMPRE regresa nada más una
+   sugerencia con porcentaje — nunca asigna el cliente por su cuenta, eso
+   siempre lo confirma la persona tocando la sugerencia. */
+function emparejarCliente(datos){
+  const nombre = datos && datos.clienteTexto;
+  const telefono = datos && datos.clienteTelefono ? String(datos.clienteTelefono).replace(/\D/g,"") : "";
+  if(!nombre && !telefono) return null;
+  let mejor = null, mejorPct = 0;
+  D.customers.forEach(c=>{
+    let pct = 0;
+    if(telefono && c.phone && String(c.phone).replace(/\D/g,"") === telefono) pct = 100;
+    else if(nombre) pct = porcentajeSimilitud(nombre, c.displayName||"");
+    if(pct > mejorPct){ mejorPct = pct; mejor = c; }
   });
-  return mejorPuntaje >= 2 ? mejor : null;   // exige coincidencia real, nunca una palabra suelta
+  return (mejor && mejorPct >= 40) ? {cliente:mejor, porcentaje:mejorPct} : null;
 }
 
-function procesarNotaEscaneada(datos){
-  if(datos.tipo === "compra") return prellenarGastoDesdeScan(datos);
-  if(datos.tipo === "venta") return prellenarPedidoDesdeScan(datos);
-  return elegirTipoManual(datos);
+function procesarNotaEscaneada(datos, foto){
+  if(datos.documentosDetectados!=null && datos.documentosDetectados !== 1) return avisarMultiplesNotas(datos);
+  if(datos.tipo === "compra") return prellenarGastoDesdeScan(datos, foto);
+  if(datos.tipo === "venta") return prellenarPedidoDesdeScan(datos, foto);
+  return elegirTipoManual(datos, foto);
 }
 
-function prellenarGastoDesdeScan(datos){
+function avisarMultiplesNotas(datos){
+  const n = datos.documentosDetectados;
+  abrirHoja({titulo:"Foto con varias notas", pie:false, render:f=>{
+    f.cuerpo.innerHTML = `<h2 class="pregunta">${n===0?"No encontré ninguna nota":"Encontré "+n+" notas en la foto"}</h2>
+      <div class="aviso rojo">${n===0
+        ? "No pude leer ninguna nota en esta foto. Intenta de nuevo con mejor luz o más de cerca."
+        : "Para no mezclar fechas, clientes y totales de notas distintas, escanea cada una por separado — una foto, una nota."}</div>
+      <button class="btn" id="mn-ok" style="margin-top:14px">Entendido</button>`;
+    $("mn-ok").onclick = cerrarHoja;
+  }});
+}
+
+function prellenarGastoDesdeScan(datos, foto){
   const catMP = D.expenseCategories.find(c=>c.name==="Materia prima") || D.expenseCategories[0];
   const items = (datos.items||[]).map(textoItemScan).join("; ");
-  const avisos = [];
-  if(datos.revisarTotal) avisos.push("El total no cuadra con la suma de los artículos — revísalo");
-  if(datos.estadoPago) avisos.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
+  const notaExtra = [];
+  if(datos.estadoPago) notaExtra.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
   abrirGasto(null, {
     concept: items || "Compra escaneada",
     amountCents: Math.round((datos.total||0)*100),
+    date: datos.fecha || HOY(),
     categoryId: catMP ? catMP.id : undefined,
-    supplier: datos.contraparte || "La Herradura",
-    note: [datos.notas, datos.folio ? ("Folio "+datos.folio) : null, ...avisos].filter(Boolean).join(" · ")
+    supplier: datos.clienteTexto || "La Herradura",
+    note: [datos.notas, datos.folio ? ("Folio "+datos.folio) : null, ...notaExtra].filter(Boolean).join(" · "),
+    foto, avisoRevision: datos.requiereRevision ? (datos.advertencias||[]) : null
   });
 }
 
-function prellenarPedidoDesdeScan(datos){
+function prellenarPedidoDesdeScan(datos, foto){
   const matches = [], sinMatch = [];
   (datos.items||[]).forEach(i=>{
-    const prod = emparejarProducto(i.descripcion);
+    const prod = emparejarProducto(i.articuloSugerido || i.descripcionTexto);
     const cap = prod ? capParaProducto(prod, i.cantidad) : null;
     if(prod && cap) matches.push({productId:prod.id, cap});
     else sinMatch.push(i);
   });
   const clienteSugerido = emparejarCliente(datos);
-  const avisos = [];
-  if(sinMatch.length) avisos.push("Agregar a mano (no coincidió con el catálogo): "+sinMatch.map(textoItemScan).join("; "));
-  if(datos.revisarTotal) avisos.push("El total no cuadra con la suma de los artículos — revísalo");
-  if(datos.estadoPago) avisos.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
+  const notaExtra = [];
+  if(sinMatch.length) notaExtra.push("Agregar a mano (no coincidió con el catálogo): "+sinMatch.map(textoItemScan).join("; "));
+  if(datos.estadoPago) notaExtra.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
   abrirCapturaPedido(null, {
-    nombre: clienteSugerido ? clienteSugerido.displayName : (datos.contraparte || ""),
-    customerId: clienteSugerido ? clienteSugerido.id : null,
-    sugeridoPorScan: !!clienteSugerido,
+    nombre: datos.clienteTexto || "",
+    clienteSugerido,
+    deliveryDate: datos.fecha || HOY(),
     matches,
-    note: [datos.notas, ...avisos].filter(Boolean).join(" · ")
+    note: [datos.notas, ...notaExtra].filter(Boolean).join(" · "),
+    foto, avisoRevision: datos.requiereRevision ? (datos.advertencias||[]) : null
   });
 }
 
-function elegirTipoManual(datos){
+function elegirTipoManual(datos, foto){
   abrirHoja({titulo:"¿Compra o venta?", pie:false, render:f=>{
     const resumen = (datos.items||[]).map(textoItemScan).join("<br>");
     f.cuerpo.innerHTML = `<h2 class="pregunta">No pude saber si es compra o venta</h2>
       <p class="ayuda">Esto leí de la nota — dime cuál es:</p>
+      ${foto?`<img src="data:${foto.mediaType};base64,${foto.base64}" alt="Nota" style="width:100%;max-height:220px;object-fit:contain;border-radius:12px;margin-bottom:12px;background:#00000008">`:""}
       <div class="bloque"><p class="bloque-t">Leído de la nota</p>
         <p>${resumen || "(sin artículos claros)"}</p>
         ${datos.total!=null?`<p style="margin-top:8px"><b>Total: $${numBonito(datos.total)}</b></p>`:""}
@@ -642,8 +686,8 @@ function elegirTipoManual(datos){
       </div>
       <button class="btn" id="et-compra" style="margin-bottom:9px">Es una compra</button>
       <button class="btn claro" id="et-venta">Es una venta</button>`;
-    $("et-compra").onclick = ()=>{ cerrarHoja(); prellenarGastoDesdeScan(Object.assign({},datos,{tipo:"compra"})); };
-    $("et-venta").onclick  = ()=>{ cerrarHoja(); prellenarPedidoDesdeScan(Object.assign({},datos,{tipo:"venta"})); };
+    $("et-compra").onclick = ()=>{ cerrarHoja(); prellenarGastoDesdeScan(Object.assign({},datos,{tipo:"compra"}), foto); };
+    $("et-venta").onclick  = ()=>{ cerrarHoja(); prellenarPedidoDesdeScan(Object.assign({},datos,{tipo:"venta"}), foto); };
   }});
 }
 
@@ -1562,11 +1606,15 @@ const PASOS=4;
 
 function abrirCapturaPedido(id, prefill){
   const p = id ? D.orders.find(x=>x.id===id) : null;
+  const fotoEscaneo = prefill && prefill.foto || null;
+  const avisoEscaneo = prefill && prefill.avisoRevision || null;
   bor = {editando:p?p.id:null, customerId:p?p.customerId:((prefill&&prefill.customerId)||null),
     nombre:p?p.customerNameSnapshot:((prefill&&prefill.nombre)||""),
     est:nuevaCesta(), packaging:p?p.packaging:((prefill&&prefill.packaging)||"normal"),
-    deliveryDate:p?p.deliveryDate:HOY(), note:p?p.note:((prefill&&prefill.note)||""),
-    sugeridoPorScan: !!(prefill && prefill.sugeridoPorScan)};
+    deliveryDate:p?p.deliveryDate:((prefill&&prefill.deliveryDate)||HOY()),
+    note:p?p.note:((prefill&&prefill.note)||""),
+    clienteSugerido: (prefill && prefill.clienteSugerido) || null,
+    fotoEscaneo, avisoEscaneo};
   if(!p && bor.customerId){
     const cl = clientePorId(bor.customerId);
     if(cl) bor.est.tier = cl.defaultPriceTier || "retail";
@@ -1609,15 +1657,30 @@ function pintarPasoPedido(){
   $("ir-sig").style.display = pasoBor===PASOS ? "none" : "";
   $("acc-final").style.display = pasoBor===PASOS ? "flex" : "none";
 
+  const bloqueFotoAviso =
+    (bor.avisoEscaneo && bor.avisoEscaneo.length?`<div class="aviso rojo" style="margin-bottom:14px"><b>Revisa antes de guardar:</b><br>${bor.avisoEscaneo.map(esc).join("<br>")}</div>`:"")
+    + (bor.fotoEscaneo?`<img src="data:${bor.fotoEscaneo.mediaType};base64,${bor.fotoEscaneo.base64}" alt="Nota escaneada" style="width:100%;max-height:220px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:#00000008">`:"");
+
   if(pasoBor===1){
-    c.innerHTML = `<h2 class="pregunta">¿Para quién es?</h2>
+    c.innerHTML = `${bloqueFotoAviso}<h2 class="pregunta">¿Para quién es?</h2>
       <p class="ayuda">Toca un cliente${hayAgenda()?", tráelo de tu agenda":""} o escribe uno nuevo.</p>
       ${hayAgenda()?`<div class="import"><div><strong>Traer de mi agenda</strong>
           <span>Escoge el contacto y se llena solo.</span></div>
         <button id="ped-agenda">Agenda</button></div>`:""}
       <input class="txt" id="cli-q" placeholder="Nombre del cliente" value="${esc(bor.nombre)}" autocomplete="off">
-      ${bor.sugeridoPorScan?`<p class="pista" id="cli-sug" style="color:var(--oro);margin-top:6px">Sugerido por el escaneo — cambia el nombre si no es correcto.</p>`:""}
+      ${bor.clienteSugerido && !bor.customerId?`<button class="op col" id="cli-sug" style="margin-top:8px;border-color:var(--oro)">
+          <strong>Cliente sugerido: ${esc(bor.clienteSugerido.cliente.displayName)}</strong>
+          <span class="men">${bor.clienteSugerido.porcentaje}% de coincidencia — toca para usarlo</span></button>`
+        : (!bor.customerId && bor.nombre.trim() && !clientePorNombre(bor.nombre) ?
+          `<p class="pista" style="margin-top:6px">No encontré este cliente — se creará "${esc(bor.nombre.trim())}" al confirmar.</p>` : "")}
       <div class="opciones" style="margin-top:12px" id="cli-lista"></div>`;
+    const bSug = $("cli-sug");
+    if(bSug) bSug.onclick = ()=>{
+      const cl = bor.clienteSugerido.cliente;
+      bor.customerId=cl.id; bor.nombre=cl.displayName; bor.est.tier=cl.defaultPriceTier||"retail";
+      bor.clienteSugerido=null;
+      pintarPasoPedido();
+    };
     const bAg = $("ped-agenda");
     if(bAg) bAg.onclick = ()=>traerDeAgenda(({nombre,tel})=>{
       if(!nombre) return;
@@ -1643,17 +1706,17 @@ function pintarPasoPedido(){
       });
     };
     $("cli-q").oninput = e=>{ bor.nombre=e.target.value; bor.customerId=null;
-      if(bor.sugeridoPorScan){ bor.sugeridoPorScan=false; const s=$("cli-sug"); if(s) s.remove(); }
+      if(bor.clienteSugerido){ bor.clienteSugerido=null; const s=$("cli-sug"); if(s) s.remove(); }
       lista(); validarPedido(); };
     lista();
   }
   if(pasoBor===2){
-    c.innerHTML = `<h2 class="pregunta">¿Qué lleva?</h2>
+    c.innerHTML = `${bloqueFotoAviso}<h2 class="pregunta">¿Qué lleva?</h2>
       <p class="ayuda">Precio según la tarifa del cliente.</p><div id="sel"></div>`;
     pintarSelector($("sel"), bor.est, validarPedido);
   }
   if(pasoBor===3){
-    c.innerHTML = `<h2 class="pregunta">Entrega</h2>
+    c.innerHTML = `${bloqueFotoAviso}<h2 class="pregunta">Entrega</h2>
       <p class="ayuda">Fecha y detalles.</p>
       <div class="campo"><label>¿Para cuándo?</label>
         <div class="par"><button data-f="hoy" aria-pressed="${bor.deliveryDate===HOY()}">Hoy</button>
@@ -1671,7 +1734,7 @@ function pintarPasoPedido(){
   }
   if(pasoBor===PASOS){
     const items = renglonesDe(bor.est);
-    c.innerHTML = `<h2 class="pregunta">¿Todo bien?</h2><p class="ayuda">Revisa antes de guardar.</p>
+    c.innerHTML = `${bloqueFotoAviso}<h2 class="pregunta">¿Todo bien?</h2><p class="ayuda">Revisa antes de guardar.</p>
       <div class="res">
         <div style="display:flex;align-items:flex-start;gap:12px">
           <div style="flex:1"><div class="res-nom">${esc(bor.nombre)}</div>
@@ -2505,11 +2568,14 @@ function pintarGastos(){
 
 function abrirGasto(id, prefill){
   const orig = id ? D.expenses.find(g=>g.id===id) : null;
+  const { foto, avisoRevision, ...prefillDatos } = prefill || {};
   const g = orig ? clon(orig) : Object.assign({id:uid("gas"), folio:null, date:HOY(), concept:"",
     categoryId:(D.expenseCategories[0]||{}).id, amountCents:0, paymentMethod:"cash",
-    supplier:"", receiptDataUrl:"", note:"", status:"active", createdAt:ahora(), updatedAt:ahora()}, prefill||{});
+    supplier:"", receiptDataUrl:"", note:"", status:"active", createdAt:ahora(), updatedAt:ahora()}, prefillDatos);
   abrirHoja({titulo: orig?"Gasto "+orig.folio:"Nuevo gasto", pie:true, render:f=>{
     f.cuerpo.innerHTML = `
+      ${avisoRevision && avisoRevision.length?`<div class="aviso rojo" style="margin-bottom:14px"><b>Revisa antes de guardar:</b><br>${avisoRevision.map(esc).join("<br>")}</div>`:""}
+      ${foto?`<img src="data:${foto.mediaType};base64,${foto.base64}" alt="Nota escaneada" style="width:100%;max-height:260px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:#00000008">`:""}
       <div class="campo"><label>Concepto</label><input class="txt" id="g-c" value="${esc(g.concept)}" placeholder="Gasolina de reparto"></div>
       <div class="rejilla2">
         <div class="campo"><label>Monto</label>
