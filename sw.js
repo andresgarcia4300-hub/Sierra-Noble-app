@@ -5,7 +5,7 @@
    una versión nueva del index.html, o los teléfonos seguirán
    viendo la vieja.
    ══════════════════════════════════════════════════════════ */
-const VERSION = "sierra-noble-v3-2-costos-por-kilo";
+const VERSION = "sierra-noble-v4-service-compartido";
 const ARCHIVOS = [
   "./",
   "./index.html",

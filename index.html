@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sierra Noble</title>
+<title>Sierra Noble Service</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -306,14 +306,14 @@ details summary{padding:13px 0;font-weight:700;cursor:pointer}
 <meta name="theme-color" content="#B8862B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Sierra Noble">
+<meta name="apple-mobile-web-app-title" content="Sierra Noble Service">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <div class="topbar">
   <div class="tb-fila">
     <svg class="logo" viewBox="0 0 100 100" role="img" aria-label="Sierra Noble" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="26" fill="#0c0b0a"/><path d="M8 74 L28 44 L38 57 L52 32 L64 51 L74 43 L92 74 Z" fill="#C79A3B"/><path d="M52 32 L58 41 L52 45 L46 41 Z" fill="#F4E9CE"/><path d="M28 44 L33 51 L28 54 L24 51 Z" fill="#F4E9CE"/></svg>
     <div>
       <div class="marca-t">Sierra <span style="color:var(--oro)">Noble</span></div>
-      <div class="marca-s" id="negocio"></div>
+      <div class="marca-s" id="negocio">Service</div>
     </div>
     <div class="estado-g">
       <span class="punto" id="punto"></span><span id="estado-txt">Guardado</span>
@@ -451,7 +451,7 @@ async function procesarScanAhora(base64, mediaType, ses){
     });
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "no se pudo leer la nota");
-    procesarNotaEscaneada(j.datos || {}, {base64, mediaType});
+    abrirClasificacionScan(j.datos || {}, {base64, mediaType});
   }catch(err){
     aviso("No se pudo escanear: "+(err.message||"intenta de nuevo"),"err",6000);
   }
@@ -529,7 +529,7 @@ async function revisarScanPendiente(row){
     const j = await r.json();
     if(!j.ok) throw new Error(j.error || "no se pudo leer la nota");
     if(sb) await sb.from("scans_pendientes").update({estado:"revisado"}).eq("id", row.id);
-    procesarNotaEscaneada(j.datos || {}, {base64, mediaType: blob.type || "image/jpeg"});
+    abrirClasificacionScan(j.datos || {}, {base64, mediaType: blob.type || "image/jpeg"});
   }catch(err){
     aviso("No se pudo procesar: "+(err.message||"intenta de nuevo"),"err",6000);
   }
@@ -617,6 +617,34 @@ function emparejarCliente(datos){
     if(pct > mejorPct){ mejorPct = pct; mejor = c; }
   });
   return (mejor && mejorPct >= 40) ? {cliente:mejor, porcentaje:mejorPct} : null;
+}
+
+/* Primera decisión de todos los scans. La IA propone, pero Andrés o Luis
+   confirman tanto el tipo de movimiento como su estado de pago. */
+function abrirClasificacionScan(datos, foto){
+  const d=Object.assign({tipo:null,estadoPago:null},datos||{});
+  abrirHoja({titulo:"Clasificar Scan",pie:true,render:f=>{
+    f.cuerpo.innerHTML=`<h2 class="pregunta">¿Qué movimiento es?</h2>
+      <p class="ayuda">Centinela propone una lectura. Confírmala antes de revisar los artículos.</p>
+      ${foto?`<img src="data:${foto.mediaType};base64,${foto.base64}" alt="Nota escaneada" style="width:100%;max-height:280px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:#00000008">`:""}
+      <div class="campo"><label>Tipo de movimiento</label><div class="par">
+        <button data-sc-tipo="compra" aria-pressed="${d.tipo==="compra"}">Compra</button>
+        <button data-sc-tipo="venta" aria-pressed="${d.tipo==="venta"}">Venta</button></div></div>
+      <div class="campo"><label>Estado de pago</label><div class="par">
+        <button data-sc-pago="pagado" aria-pressed="${d.estadoPago==="pagado"}">Pagado</button>
+        <button data-sc-pago="pendiente" aria-pressed="${d.estadoPago==="pendiente"}">Pendiente de pagar</button></div></div>
+      <div class="campo"><label>${d.tipo==="compra"?"Proveedor":"Cliente detectado"}</label><input class="txt" id="sc-cliente" value="${esc(d.clienteTexto||"")}" placeholder="Puedes corregirlo"></div>
+      ${(d.advertencias||[]).length?`<div class="aviso oro">${d.advertencias.map(esc).join("<br>")}</div>`:""}`;
+    f.cuerpo.querySelectorAll("[data-sc-tipo]").forEach(b=>b.onclick=()=>{d.tipo=b.dataset.scTipo;f.cuerpo.querySelectorAll("[data-sc-tipo]").forEach(x=>x.setAttribute("aria-pressed",x===b));});
+    f.cuerpo.querySelectorAll("[data-sc-pago]").forEach(b=>b.onclick=()=>{d.estadoPago=b.dataset.scPago;f.cuerpo.querySelectorAll("[data-sc-pago]").forEach(x=>x.setAttribute("aria-pressed",x===b));});
+    f.pie.innerHTML=`<button class="btn" id="sc-clasificar">Continuar a revisión</button>`;
+    $("sc-clasificar").onclick=()=>{
+      d.clienteTexto=$("sc-cliente").value.trim()||null;
+      if(!d.tipo){aviso("Selecciona Compra o Venta","err");return;}
+      if(!d.estadoPago){aviso("Selecciona Pagado o Pendiente de pagar","err");return;}
+      cerrarHoja(); procesarNotaEscaneada(d,foto);
+    };
+  }});
 }
 
 function procesarNotaEscaneada(datos, foto){
@@ -738,6 +766,7 @@ function abrirRevisionCompraScan(datos, foto, productos, lineas){
       const catMP=D.expenseCategories.find(c=>c.name==="Materia prima")||D.expenseCategories[0];
       cerrarHoja();
       abrirGasto(null,{concept:scanItems.map(i=>`${numBonito(i.quantityKg)} kg ${i.nameSnapshot}`).join("; "),amountCents:totalCents,date:datos.fecha||HOY(),categoryId:catMP?catMP.id:undefined,supplier:datos.clienteTexto||"La Herradura",items:scanItems,
+        paymentStatus:datos.estadoPago==="pendiente"?"pending":"paid",
         note:[datos.notas,datos.folio?("Folio "+datos.folio):null,`Scan revisado por ${aprobador}`].filter(Boolean).join(" · "),foto});
     };
   }});
@@ -1868,7 +1897,8 @@ async function avanzarPedido(){
   const cli = bor.customerId ? clientePorId(bor.customerId) : altaClienteRapida(bor.nombre, bor.est.tier);
   const campos = {customerId:cli?cli.id:null, customerNameSnapshot:bor.nombre.trim(),
     priceTier:bor.est.tier, items, deliveryDate:bor.deliveryDate, packaging:bor.packaging, note:bor.note,
-    subtotalCents:t.subtotal, taxCents:t.tax, totalCents:t.subtotal+t.tax, updatedAt:ahora()};
+    subtotalCents:t.subtotal, taxCents:t.tax, totalCents:t.subtotal+t.tax,
+    updatedBy:(ajustesSync().correo||"local"), updatedAt:ahora()};
   let ped;
   if(bor.editando){
     ped = D.orders.find(x=>x.id===bor.editando);
@@ -2659,6 +2689,7 @@ function pintarGastos(){
       <div class="f-pie"><span class="etq">${g.folio}</span>
         <span style="font-size:13px;color:var(--tinta-40)">${fechaCorta(g.date)}</span>
         <span class="etq">${METODOS[g.paymentMethod]||"Otro"}</span>
+        <span class="etq ${g.paymentStatus==="pending"?"rojo":"verde"}">${g.paymentStatus==="pending"?"Pendiente":"Pagado"}</span>
         ${g.receiptDataUrl?`<span class="etq">📎</span>`:""}
         ${g.status==="cancelled"?`<span class="etq gris">Cancelado</span>`:""}
         <span class="f-tot">${pesos(g.amountCents)}</span></div></button>`).join("")
@@ -2672,7 +2703,7 @@ function abrirGasto(id, prefill){
   const orig = id ? D.expenses.find(g=>g.id===id) : null;
   const { foto, avisoRevision, ...prefillDatos } = prefill || {};
   const g = orig ? clon(orig) : Object.assign({id:uid("gas"), folio:null, date:HOY(), concept:"",
-    categoryId:(D.expenseCategories[0]||{}).id, amountCents:0, paymentMethod:"cash",
+    categoryId:(D.expenseCategories[0]||{}).id, amountCents:0, paymentMethod:"cash", paymentStatus:"paid",
     supplier:"", receiptDataUrl:"", note:"", status:"active", createdAt:ahora(), updatedAt:ahora()}, prefillDatos);
   abrirHoja({titulo: orig?"Gasto "+orig.folio:"Nuevo gasto", pie:true, render:f=>{
     f.cuerpo.innerHTML = `
@@ -2690,6 +2721,9 @@ function abrirGasto(id, prefill){
       <div class="campo"><label>Método de pago</label>
         <div class="par">${METODOS_LISTA.map(m=>
           `<button data-met="${m}" aria-pressed="${g.paymentMethod===m}">${METODOS[m]}</button>`).join("")}</div></div>
+      <div class="campo"><label>Estado del pago</label><div class="par">
+        <button data-gpago="paid" aria-pressed="${g.paymentStatus!=="pending"}">Pagado</button>
+        <button data-gpago="pending" aria-pressed="${g.paymentStatus==="pending"}">Pendiente de pagar</button></div></div>
       <div class="campo"><label>Proveedor</label><input class="txt" id="g-p" value="${esc(g.supplier)}"></div>
       <div class="campo"><label>Nota</label><textarea class="txt" id="g-n" rows="2">${esc(g.note)}</textarea></div>
       <div class="campo"><label>Comprobante</label>
@@ -2700,6 +2734,8 @@ function abrirGasto(id, prefill){
       ${orig&&orig.status==="cancelled"?`<div class="aviso rojo">Gasto cancelado.</div>`:""}`;
     f.cuerpo.querySelectorAll("[data-met]").forEach(b=>b.onclick=()=>{ g.paymentMethod=b.dataset.met;
       f.cuerpo.querySelectorAll("[data-met]").forEach(o=>o.setAttribute("aria-pressed", o===b)); });
+    f.cuerpo.querySelectorAll("[data-gpago]").forEach(b=>b.onclick=()=>{ g.paymentStatus=b.dataset.gpago;
+      f.cuerpo.querySelectorAll("[data-gpago]").forEach(o=>o.setAttribute("aria-pressed",o===b)); });
     $("g-file").onchange = e=>{
       const file = e.target.files && e.target.files[0]; if(!file) return;
       if(!/^image\//.test(file.type)){ aviso("Solo se aceptan imágenes","err"); e.target.value=""; return; }
@@ -2721,7 +2757,7 @@ function abrirGasto(id, prefill){
       g.supplier=$("g-p").value.trim(); g.note=$("g-n").value.trim();
       if(!g.concept){ aviso("Escribe el concepto","err"); return; }
       if(g.amountCents<=0){ aviso("El monto debe ser mayor a cero","err"); return; }
-      g.updatedAt = ahora();
+      g.updatedBy=ajustesSync().correo||"local"; g.updatedAt = ahora();
       if(orig) Object.assign(orig, g);
       else { g.folio = folio("expense","GAS"); D.expenses.push(g); }
       await guardar(); cerrarHoja(); aviso("Gasto guardado","ok"); refrescar();
@@ -2807,7 +2843,7 @@ function pintarMas(){
       fiscalRegime:$("m-reg").value.trim(), fiscalZipCode:$("m-cp").value.trim()};
     await guardar();
     $("negocio").textContent = D.settings.negocio;
-    document.title = D.settings.negocio+" · Sierra Noble";
+    document.title = "Sierra Noble Service";
     aviso("Guardado","ok");
   };
   const bd=$("m-demo");
@@ -3128,9 +3164,41 @@ function migrarEsquema(d){
     (d[t]||[]).forEach(r=>{ if(!r.updatedAt) r.updatedAt = r.createdAt || ahora(); }));
   if(!d.sync) d.sync = {url:"", token:"", activo:false, ultimoPush:null, ultimoPull:null,
                         dispositivo:uid("disp"), ultimoError:"", ultimaVez:null, correo:""};
-  d.expenses.forEach(g=>{ if(!g.status) g.status="active"; });
+  d.expenses.forEach(g=>{ if(!g.status) g.status="active"; if(!g.paymentStatus) g.paymentStatus="paid"; });
   d.schemaVersion = SCHEMA;
   return d;
+}
+
+function cerrarIntro(){
+  const el=$("intro-acceso"); if(!el)return;
+  el.style.opacity="0"; setTimeout(()=>el.remove(),280);
+}
+function mostrarAccesoInicial(sesion){
+  const el=document.createElement("section"); el.id="intro-acceso";
+  el.style.cssText="position:fixed;inset:0;z-index:200;background:var(--papel);display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .28s";
+  const correo=(sesion&&sesion.user&&sesion.user.email)||"";
+  el.innerHTML=`<div style="width:100%;max-width:420px;text-align:center">
+    <svg viewBox="0 0 100 100" aria-label="Sierra Noble" style="width:92px;height:92px;border-radius:24px;margin-bottom:18px"><rect width="100" height="100" rx="26" fill="#0c0b0a"/><path d="M8 74 L28 44 L38 57 L52 32 L64 51 L74 43 L92 74 Z" fill="#C79A3B"/><path d="M52 32 L58 41 L52 45 L46 41 Z" fill="#F4E9CE"/><path d="M28 44 L33 51 L28 54 L24 51 Z" fill="#F4E9CE"/></svg>
+    <h1 style="font-size:36px">Sierra Noble</h1><p style="color:var(--oro);font-weight:800;letter-spacing:.28em;text-transform:uppercase;margin:4px 0 28px">Service</p>
+    ${correo?`<div class="bloque"><p class="bloque-t">Sesión iniciada</p><b>${esc(correo)}</b><p class="pista">Sincronizando tus cambios…</p></div>`:`
+      <p class="ayuda">Andrés y Luis entran con su propia cuenta y comparten la misma información.</p>
+      <div class="campo" style="text-align:left"><label>Correo</label><input class="txt" id="intro-mail" type="email" inputmode="email" autocomplete="username"></div>
+      <div class="campo" style="text-align:left"><label>Contraseña</label><input class="txt" id="intro-pass" type="password" autocomplete="current-password"></div>
+      <button class="btn" id="intro-entrar">Entrar a Sierra Noble</button>
+      <p class="pista" id="intro-error" style="color:var(--rojo);min-height:20px;margin-top:12px"></p>`}
+  </div>`;
+  document.body.appendChild(el);
+  if(correo){ setTimeout(cerrarIntro,1100); return; }
+  $("intro-entrar").onclick=async()=>{
+    const mail=$("intro-mail").value.trim(), pass=$("intro-pass").value;
+    if(!mail||!pass){$("intro-error").textContent="Escribe correo y contraseña.";return;}
+    const b=$("intro-entrar"); b.disabled=true; b.textContent="Entrando…";
+    try{
+      const data=await Sync.entrar(mail,pass);
+      const s=ajustesSync(); s.activo=true; s.correo=(data.user&&data.user.email)||mail;
+      Sync.suscribir(); await Sync.ciclo({silencioso:true}); cerrarIntro();
+    }catch(e){$("intro-error").textContent="No se pudo entrar: "+(e.message||"revisa tus datos");b.disabled=false;b.textContent="Entrar a Sierra Noble";}
+  };
 }
 
 async function arrancar(){
@@ -3144,8 +3212,8 @@ async function arrancar(){
     D.products = catalogoInicial();
     await guardar();
   }
-  $("negocio").textContent = D.settings.negocio;
-  document.title = D.settings.negocio+" · Sierra Noble";
+  $("negocio").textContent = "Service";
+  document.title = "Sierra Noble Service";
   $("a-clientes").onclick = abrirClientes;
   $("a-articulos").onclick= abrirProductos;
   pintarNav();
@@ -3166,6 +3234,7 @@ async function arrancar(){
     });
   }
   if(ses){ Sync.suscribir(); setTimeout(()=>Sync.ciclo({silencioso:true}), 800); }
+  mostrarAccesoInicial(ses);
   if(avisos.length) setTimeout(()=>aviso(avisos[0],"",7000), 900);
   if(Disco.modo()==="memoria") setTimeout(()=>aviso("Sin almacenamiento disponible: descarga un respaldo antes de cerrar.","err",9000), 1400);
 }
@@ -3264,7 +3333,18 @@ const Sync = (()=>{
     try{
       const bajada = await pullSB(s.ultimoPull);
       let res = {aplicados:0, conflictos:0};
-      if(bajada && bajada.datos) res = fundir(bajada.datos);
+      if(bajada && bajada.datos){
+        /* En el primer acceso de un teléfono vacío (por ejemplo el de Luis),
+           la información compartida reemplaza el catálogo local de muestra.
+           Esto evita duplicados y nunca se activa en un teléfono que ya tenga
+           gastos, pedidos, ventas o clientes capturados. */
+        const telefonoVacio=!s.ultimoPull && !D.orders.length && !D.sales.length && !D.payments.length && !D.expenses.length && !D.customers.length;
+        if(telefonoVacio){
+          let adoptados=0;
+          TABLAS.forEach(t=>{const rem=bajada.datos[t];if(Array.isArray(rem)&&rem.length){D[t]=clon(rem);adoptados+=rem.length;}});
+          res={aplicados:adoptados,conflictos:0};
+        } else res = fundir(bajada.datos);
+      }
       if(bajada && bajada.hasta) s.ultimoPull = bajada.hasta;
 
       const mios = cambiosDesde(s.ultimoPush);
@@ -3289,7 +3369,7 @@ const Sync = (()=>{
       return {ok:false, motivo:s.ultimoError};
     }finally{
       corriendo = false;
-      if(pendiente){ pendiente = false; setTimeout(()=>ciclo({silencioso:true}), 1500); }
+      if(pendiente){ pendiente = false; setTimeout(()=>ciclo({silencioso:true}), 500); }
     }
   }
 
@@ -3318,7 +3398,7 @@ const Sync = (()=>{
       const s = ajustesSync();
       if(!sb || !s.activo) return;
       clearTimeout(temporizador);
-      temporizador = setTimeout(()=>ciclo({silencioso:true}), 3000);
+      temporizador = setTimeout(()=>ciclo({silencioso:true}), 400);
     },
     async entrar(correo, clave){
       if(!sb) throw new Error("Sin conexión con el servidor");
@@ -3330,7 +3410,7 @@ const Sync = (()=>{
       desuscribir();
       if(sb){ try{ await sb.auth.signOut(); }catch(e){} }
       const s = ajustesSync(); s.activo = false; s.correo = "";
-      await guardar(); marcaSync("ok");
+      await guardar(); marcaSync("ok"); mostrarAccesoInicial(null);
     },
     hayCambios(){ return cuentaCambios(cambiosDesde(ajustesSync().ultimoPush)); }
   };
