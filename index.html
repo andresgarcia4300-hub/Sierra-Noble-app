@@ -534,10 +534,11 @@ async function revisarScanPendiente(row){
 
 function textoItemScan(i){
   const partes = [];
-  if(i.cantidad!=null) partes.push(numBonito(i.cantidad)+(i.unidad?" "+i.unidad:""));
+  const cantTxt = i.cantidadTexto!=null ? i.cantidadTexto : (i.cantidad!=null?numBonito(i.cantidad):null);
+  if(cantTxt!=null) partes.push(cantTxt+(i.unidad?" "+i.unidad:""));
   partes.push(i.descripcion || "artículo");
   if(i.importe!=null) partes.push("$"+numBonito(i.importe));
-  return partes.join(" ");
+  return (i.revisar?"⚠️ ":"")+partes.join(" ");
 }
 
 /* búsqueda difusa contra tu catálogo real; nunca inventa un producto que no exista */
@@ -562,6 +563,30 @@ function capParaProducto(prod, cantidad){
   return {modo:"unidad", cantidad: Number(cantidad)||0};
 }
 
+/* búsqueda difusa contra tus clientes guardados — a propósito más estricta que la
+   de productos: solo sugiere si hay coincidencia clara (nombre completo o
+   teléfono exacto), nunca por una sola palabra suelta. La app SIEMPRE deja el
+   nombre editable y jamás asigna el cliente sin que tú lo confirmes. */
+function emparejarCliente(datos){
+  const nombre = datos && datos.contraparte;
+  const telefono = datos && datos.contraparteTelefono ? String(datos.contraparteTelefono).replace(/\D/g,"") : "";
+  if(!nombre && !telefono) return null;
+  const sinAcentos = s => normaliza(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  const n = nombre ? sinAcentos(nombre) : "";
+  let mejor = null, mejorPuntaje = 0;
+  D.customers.forEach(c=>{
+    let puntaje = 0;
+    if(telefono && c.phone && String(c.phone).replace(/\D/g,"") === telefono) puntaje = 4;
+    const nc = sinAcentos(c.displayName||"");
+    if(n && nc){
+      if(nc === n) puntaje = Math.max(puntaje, 3);
+      else if(n.length>3 && (nc.includes(n) || n.includes(nc))) puntaje = Math.max(puntaje, 2);
+    }
+    if(puntaje > mejorPuntaje){ mejorPuntaje = puntaje; mejor = c; }
+  });
+  return mejorPuntaje >= 2 ? mejor : null;   // exige coincidencia real, nunca una palabra suelta
+}
+
 function procesarNotaEscaneada(datos){
   if(datos.tipo === "compra") return prellenarGastoDesdeScan(datos);
   if(datos.tipo === "venta") return prellenarPedidoDesdeScan(datos);
@@ -571,12 +596,15 @@ function procesarNotaEscaneada(datos){
 function prellenarGastoDesdeScan(datos){
   const catMP = D.expenseCategories.find(c=>c.name==="Materia prima") || D.expenseCategories[0];
   const items = (datos.items||[]).map(textoItemScan).join("; ");
+  const avisos = [];
+  if(datos.revisarTotal) avisos.push("El total no cuadra con la suma de los artículos — revísalo");
+  if(datos.estadoPago) avisos.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
   abrirGasto(null, {
     concept: items || "Compra escaneada",
     amountCents: Math.round((datos.total||0)*100),
     categoryId: catMP ? catMP.id : undefined,
     supplier: datos.contraparte || "La Herradura",
-    note: [datos.notas, datos.folio ? ("Folio "+datos.folio) : null].filter(Boolean).join(" · ")
+    note: [datos.notas, datos.folio ? ("Folio "+datos.folio) : null, ...avisos].filter(Boolean).join(" · ")
   });
 }
 
@@ -588,13 +616,17 @@ function prellenarPedidoDesdeScan(datos){
     if(prod && cap) matches.push({productId:prod.id, cap});
     else sinMatch.push(i);
   });
-  const notaExtra = sinMatch.length
-    ? "Agregar a mano (no coincidió con el catálogo): "+sinMatch.map(textoItemScan).join("; ")
-    : "";
+  const clienteSugerido = emparejarCliente(datos);
+  const avisos = [];
+  if(sinMatch.length) avisos.push("Agregar a mano (no coincidió con el catálogo): "+sinMatch.map(textoItemScan).join("; "));
+  if(datos.revisarTotal) avisos.push("El total no cuadra con la suma de los artículos — revísalo");
+  if(datos.estadoPago) avisos.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
   abrirCapturaPedido(null, {
-    nombre: datos.contraparte || "",
+    nombre: clienteSugerido ? clienteSugerido.displayName : (datos.contraparte || ""),
+    customerId: clienteSugerido ? clienteSugerido.id : null,
+    sugeridoPorScan: !!clienteSugerido,
     matches,
-    note: [datos.notas, notaExtra].filter(Boolean).join(" · ")
+    note: [datos.notas, ...avisos].filter(Boolean).join(" · ")
   });
 }
 
@@ -1530,10 +1562,15 @@ const PASOS=4;
 
 function abrirCapturaPedido(id, prefill){
   const p = id ? D.orders.find(x=>x.id===id) : null;
-  bor = {editando:p?p.id:null, customerId:p?p.customerId:null,
+  bor = {editando:p?p.id:null, customerId:p?p.customerId:((prefill&&prefill.customerId)||null),
     nombre:p?p.customerNameSnapshot:((prefill&&prefill.nombre)||""),
     est:nuevaCesta(), packaging:p?p.packaging:((prefill&&prefill.packaging)||"normal"),
-    deliveryDate:p?p.deliveryDate:HOY(), note:p?p.note:((prefill&&prefill.note)||"")};
+    deliveryDate:p?p.deliveryDate:HOY(), note:p?p.note:((prefill&&prefill.note)||""),
+    sugeridoPorScan: !!(prefill && prefill.sugeridoPorScan)};
+  if(!p && bor.customerId){
+    const cl = clientePorId(bor.customerId);
+    if(cl) bor.est.tier = cl.defaultPriceTier || "retail";
+  }
   if(p){
     bor.est.tier = p.priceTier||"retail";
     p.items.forEach(i=>{
@@ -1579,6 +1616,7 @@ function pintarPasoPedido(){
           <span>Escoge el contacto y se llena solo.</span></div>
         <button id="ped-agenda">Agenda</button></div>`:""}
       <input class="txt" id="cli-q" placeholder="Nombre del cliente" value="${esc(bor.nombre)}" autocomplete="off">
+      ${bor.sugeridoPorScan?`<p class="pista" id="cli-sug" style="color:var(--oro);margin-top:6px">Sugerido por el escaneo — cambia el nombre si no es correcto.</p>`:""}
       <div class="opciones" style="margin-top:12px" id="cli-lista"></div>`;
     const bAg = $("ped-agenda");
     if(bAg) bAg.onclick = ()=>traerDeAgenda(({nombre,tel})=>{
@@ -1604,7 +1642,9 @@ function pintarPasoPedido(){
         $("cli-q").value=cl.displayName; lista(); validarPedido();
       });
     };
-    $("cli-q").oninput = e=>{ bor.nombre=e.target.value; bor.customerId=null; lista(); validarPedido(); };
+    $("cli-q").oninput = e=>{ bor.nombre=e.target.value; bor.customerId=null;
+      if(bor.sugeridoPorScan){ bor.sugeridoPorScan=false; const s=$("cli-sug"); if(s) s.remove(); }
+      lista(); validarPedido(); };
     lista();
   }
   if(pasoBor===2){
