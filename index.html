@@ -638,12 +638,12 @@ function avisarMultiplesNotas(datos){
   }});
 }
 
-function costoGramoDesdeKg(centsKg){ return deCent(centsKg||0)/1000; }
-function centsKgDesdeCostoGramo(pesosGramo){ return Math.max(0, Math.round((Number(pesosGramo)||0)*1000*100)); }
+function costoKgPesos(centsKg){ return deCent(centsKg||0); }
+function centsKgDesdePesos(pesosKg){ return Math.max(0, aCent(pesosKg)); }
 
 /* Una compra escaneada no se convierte en un texto plano. Cada renglón se
    revisa, se asocia al catálogo y calcula su importe. Esto también resuelve
-   notas sin total: cantidad en kg × costo por gramo × 1000. */
+   notas sin total: cantidad en kg × costo por kg. */
 function prellenarGastoDesdeScan(datos, foto){
   const productos = D.products.filter(p=>p.active);
   const lineas = (datos.items||[]).map((i,ix)=>{
@@ -666,14 +666,14 @@ function abrirRevisionCompraScan(datos, foto, productos, lineas){
         const l=lineas.find(x=>x.id===el.dataset.scanLinea); if(!l)return;
         l.productId=el.querySelector(".sc-prod").value;
         l.cantidadKg=Math.max(0,Number(el.querySelector(".sc-cant").value)||0);
-        l.costoKgCents=centsKgDesdeCostoGramo(el.querySelector(".sc-costo").value);
+        l.costoKgCents=centsKgDesdePesos(el.querySelector(".sc-costo").value);
         l.importeCents=Math.max(0,aCent(el.querySelector(".sc-importe").value));
       });
     };
     const recalcularLinea=el=>{
       const cant=Math.max(0,Number(el.querySelector(".sc-cant").value)||0);
-      const costoGr=Math.max(0,Number(el.querySelector(".sc-costo").value)||0);
-      el.querySelector(".sc-importe").value=(cant*costoGr*1000).toFixed(2).replace(/\.00$/,"");
+      const costoKg=Math.max(0,Number(el.querySelector(".sc-costo").value)||0);
+      el.querySelector(".sc-importe").value=(cant*costoKg).toFixed(2).replace(/\.00$/,"");
     };
     const pintarTotales=()=>{
       leer();
@@ -682,11 +682,11 @@ function abrirRevisionCompraScan(datos, foto, productos, lineas){
       const dif=nota==null?0:calculado-nota;
       const box=$("sc-totales"); if(!box)return;
       box.innerHTML=`<div class="lin total"><span>Total calculado</span><b>${pesos(calculado)}</b></div>
-        ${nota==null?`<div class="aviso oro" style="margin-top:12px"><b>La nota no trae total.</b> Centinela calculó el monto con los pesos y costos por gramo.</div>`:
+        ${nota==null?`<div class="aviso oro" style="margin-top:12px"><b>La nota no trae total.</b> Centinela calculó el monto con los kilos y costos por kilo.</div>`:
         `<div class="lin"><span>Total escrito en la nota</span><b>${pesos(nota)}</b></div>${Math.abs(dif)>100?`<div class="aviso rojo" style="margin-top:12px">Hay una diferencia de <b>${pesos(Math.abs(dif))}</b>. Corrige los renglones antes de continuar.</div>`:`<div class="aviso" style="margin-top:12px;color:var(--verde);border-color:var(--verde)">Los totales coinciden.</div>`}`}`;
     };
     f.cuerpo.innerHTML=`<h2 class="pregunta">Artículo por artículo</h2>
-      <p class="ayuda">Confirma el producto, los kilos y tu costo por gramo. El importe se calcula automáticamente.</p>
+      <p class="ayuda">Confirma el producto, los kilos y tu costo por kilo. El importe se calcula automáticamente.</p>
       ${foto?`<img src="data:${foto.mediaType};base64,${foto.base64}" alt="Nota escaneada" style="width:100%;max-height:320px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:#00000008">`:""}
       ${(datos.advertencias||[]).length?`<div class="aviso rojo" style="margin-bottom:14px">${datos.advertencias.map(esc).join("<br>")}</div>`:""}
       ${lineas.length?lineas.map((l,ix)=>`<section class="bloque" data-scan-linea="${l.id}">
@@ -694,17 +694,17 @@ function abrirRevisionCompraScan(datos, foto, productos, lineas){
         <div class="campo"><label>Artículo</label><select class="txt sc-prod"><option value="">Seleccionar…</option>${productos.map(p=>`<option value="${p.id}" ${p.id===l.productId?"selected":""}>${esc(p.name)}</option>`).join("")}</select>
           <p class="pista">La nota parece decir: ${esc(l.descripcionTexto||"—")}</p></div>
         <div class="rejilla2"><div class="campo"><label>Cantidad (kg)</label><input class="num sc-cant" type="number" inputmode="decimal" min="0" step="0.001" value="${l.cantidadKg||""}"><p class="pista">Original: ${esc(l.cantidadTexto||"—")}</p></div>
-        <div class="campo"><label>Costo por gramo</label><div class="con-uni"><input class="num sc-costo" type="number" inputmode="decimal" min="0" step="0.001" value="${costoGramoDesdeKg(l.costoKgCents)||""}"><span class="uni">MXN</span></div></div></div>
+        <div class="campo"><label>Costo por kilo</label><div class="con-uni"><input class="num sc-costo" type="number" inputmode="decimal" min="0" step="0.5" value="${costoKgPesos(l.costoKgCents)||""}"><span class="uni">MXN/kg</span></div></div></div>
         <div class="campo"><label>Importe del artículo</label><div class="con-uni"><input class="num sc-importe" type="number" inputmode="decimal" min="0" step="0.01" value="${deCent(l.importeCents)}"><span class="uni">MXN</span></div>${l.importeLeidoCents!=null?`<p class="pista">La nota muestra ${pesos(l.importeLeidoCents)}; puedes corregirlo.</p>`:"<p class=\"pista\">Calculado porque la nota no muestra importe.</p>"}</div>
         <button class="btn claro sc-quitar" type="button" style="color:var(--rojo);min-height:44px;font-size:14px">Quitar este renglón</button>
       </section>`).join(""):vacio("No se detectaron artículos","Vuelve a fotografiar la nota completa, derecha y con buena luz.")}
       <button class="btn claro" id="sc-agregar" type="button" style="margin-bottom:14px">+ Agregar artículo omitido</button>
       <div class="bloque" id="sc-totales"></div>
-      <label class="check-lin"><input type="checkbox" id="sc-guardar-costos" checked> Guardar estos costos por gramo en el catálogo</label>
+      <label class="check-lin"><input type="checkbox" id="sc-guardar-costos" checked> Guardar estos costos por kilo en el catálogo</label>
       <div class="campo"><label>Revisado por</label><select class="txt" id="sc-aprueba"><option value="">Seleccionar…</option><option>Andrés</option><option>Luis</option></select></div>`;
     f.cuerpo.querySelectorAll("[data-scan-linea]").forEach(el=>{
       const sel=el.querySelector(".sc-prod");
-      sel.onchange=()=>{const p=D.products.find(x=>x.id===sel.value);if(p){el.querySelector(".sc-costo").value=costoGramoDesdeKg(p.unitCostCents)||"";recalcularLinea(el);pintarTotales();}};
+      sel.onchange=()=>{const p=D.products.find(x=>x.id===sel.value);if(p){el.querySelector(".sc-costo").value=costoKgPesos(p.unitCostCents)||"";recalcularLinea(el);pintarTotales();}};
       el.querySelector(".sc-cant").oninput=()=>{recalcularLinea(el);pintarTotales();};
       el.querySelector(".sc-costo").oninput=()=>{recalcularLinea(el);pintarTotales();};
       el.querySelector(".sc-importe").oninput=pintarTotales;
@@ -727,7 +727,7 @@ function abrirRevisionCompraScan(datos, foto, productos, lineas){
       if(!lineas.length){aviso("No hay artículos para registrar","err");return;}
       if(lineas.some(l=>!l.productId)){aviso("Selecciona el producto de cada renglón","err");return;}
       if(lineas.some(l=>l.cantidadKg<=0)){aviso("Revisa las cantidades","err");return;}
-      if(lineas.some(l=>l.costoKgCents<=0)){aviso("Captura el costo por gramo de cada producto","err");return;}
+      if(lineas.some(l=>l.costoKgCents<=0)){aviso("Captura el costo por kilo de cada producto","err");return;}
       if(!aprobador){aviso("Indica si revisó Andrés o Luis","err");return;}
       const totalCalculado=lineas.reduce((s,l)=>s+l.importeCents,0);
       const totalNota=datos.total==null?null:aCent(datos.total);
@@ -927,6 +927,15 @@ const QUESOS = [
 ];
 const CON_PORCIONES = "Requesón";
 
+/* Costos vigentes de compra. Internamente siempre se guardan por kg para que
+   cualquier peso escaneado se calcule de manera proporcional. */
+function costoCompraKgPorNombre(nombre){
+  const n=normaliza(nombre).normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+  if(n==="requeson") return 5800; // $58/kg = $14.50 por ¼ kg
+  if(n.includes("asadero") && (n.includes("jalapeno")||n.includes("chipotle")||n.includes("chiltepin"))) return 12800;
+  return 12600;
+}
+
 function nuevoProducto(p={}){
   return Object.assign({
     id:uid("prod"), name:"", category:"Lácteos", type:"manufactured",
@@ -943,7 +952,7 @@ function catalogoInicial(pr){
   const may = pr?pr.mayoreo:12800, men = pr?pr.menudeo:16000, r25 = pr?pr.req250:4000, r50 = pr?pr.req500:5000;
   const l = QUESOS.map(q=>{
     const b = {name:q.n, color:q.c, category:"Lácteos", type:"manufactured", saleUnit:"kg", allowsFraction:true,
-      retailPriceCents:men, wholesalePriceCents:may, unitCostCents:0, costoDesconocido:true, stock:null, minStock:null};
+      retailPriceCents:men, wholesalePriceCents:may, unitCostCents:costoCompraKgPorNombre(q.n), costoDesconocido:false, stock:null, minStock:null};
     if(q.n===CON_PORCIONES) b.porciones = [
       {gramos:250, retailPriceCents:r25, wholesalePriceCents:r25},
       {gramos:500, retailPriceCents:r50, wholesalePriceCents:r50}];
@@ -2368,8 +2377,8 @@ function abrirProducto(id, alVolver){
             ${Object.entries(UNIDADES).map(([k,v])=>`<option value="${k}" ${p.saleUnit===k?"selected":""}>${v[0].toUpperCase()+v.slice(1)}</option>`).join("")}</select></div>
         </div>
         <div class="rejilla2">
-          <div class="campo"><label>${p.saleUnit==="kg"?"Costo por gramo":"Costo de compra"}</label><input class="num" id="p-c" type="number" inputmode="decimal" min="0" step="${p.saleUnit==="kg"?"0.001":"0.5"}" value="${p.saleUnit==="kg"?costoGramoDesdeKg(p.unitCostCents):deCent(p.unitCostCents)}">
-            ${p.saleUnit==="kg"?`<p class="pista">Equivale a ${pesos(p.unitCostCents)} por kg.</p>`:""}</div>
+          <div class="campo"><label>${p.saleUnit==="kg"?"Costo por kilo":"Costo de compra"}</label><input class="num" id="p-c" type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(p.unitCostCents)}">
+            ${p.name==="Requesón"?`<p class="pista">${pesos(Math.round(p.unitCostCents/4))} por cuarto de kilo.</p>`:""}</div>
           <div class="campo"><label>Precio de venta</label><input class="num" id="p-pr" type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(p.retailPriceCents)}"></div>
         </div>
         <div class="campo"><label>Precio mayoreo</label><input class="num" id="p-pm" type="number" inputmode="decimal" min="0" step="0.5" value="${p.wholesalePriceCents==null?0:deCent(p.wholesalePriceCents)}"></div>
@@ -2401,7 +2410,7 @@ function abrirProducto(id, alVolver){
         p.saleUnit=$("p-uni").value;
         p.allowsFraction = (p.saleUnit==="kg"||p.saleUnit==="g");
         p.taxRate = Math.min(1, Math.max(0,(Number($("p-iva").value)||0)/100));
-        p.unitCostCents = p.saleUnit==="kg" ? centsKgDesdeCostoGramo($("p-c").value) : Math.max(0, aCent($("p-c").value));
+        p.unitCostCents = Math.max(0, aCent($("p-c").value));
         p.retailPriceCents = Math.max(0, aCent($("p-pr").value));
         const pm = aCent($("p-pm").value);
         p.wholesalePriceCents = pm>0 ? pm : null;
@@ -3097,7 +3106,13 @@ function migrarEsquema(d){
   ["products","customers","orders","sales","payments","expenses","expenseCategories","stockMoves"]
     .forEach(k=>{ if(!Array.isArray(d[k])) d[k]=[]; });
   if(!d.expenseCategories.length) d.expenseCategories = categoriasIniciales();
-  d.products.forEach(p=>{ if(p.stock===undefined) p.stock=null; if(p.minStock===undefined) p.minStock=null; });
+  d.products.forEach(p=>{
+    if(p.stock===undefined) p.stock=null; if(p.minStock===undefined) p.minStock=null;
+    const esQuesoBase=QUESOS.some(q=>normaliza(q.n)===normaliza(p.name));
+    if(esQuesoBase && (!p.unitCostCents || p.costoDesconocido)){
+      p.unitCostCents=costoCompraKgPorNombre(p.name); p.costoDesconocido=false; p.updatedAt=ahora();
+    }
+  });
   d.sales.forEach(v=>{
     if(!v.status) v.status="active";
     if(!v.invoiceStatus) v.invoiceStatus = v.invoiceRequested?"pending":"not_requested";
