@@ -787,19 +787,26 @@ function prellenarPedidoDesdeScan(datos, foto){
   (datos.items||[]).forEach(i=>{
     const prod = emparejarProducto(i.articuloSugerido || i.descripcionTexto);
     const cap = prod ? capParaProducto(prod, i.cantidad) : null;
-    if(prod && cap) matches.push({productId:prod.id, cap});
+    if(prod && cap){
+      const cantidad = Number(i.cantidad)||0;
+      const precioLeido = i.precioUnitario!=null ? aCent(i.precioUnitario)
+        : (i.importe!=null && cantidad>0 ? aCent(Number(i.importe)/cantidad) : 0);
+      if(precioLeido>0) cap.customUnitPriceCents = precioLeido;
+      matches.push({productId:prod.id, cap});
+    }
     else sinMatch.push(i);
   });
   const clienteSugerido = emparejarCliente(datos);
   const notaExtra = [];
   if(sinMatch.length) notaExtra.push("Agregar a mano (no coincidió con el catálogo): "+sinMatch.map(textoItemScan).join("; "));
   if(datos.estadoPago) notaExtra.push("Nota decía: "+(datos.estadoPago==="pagado"?"Pagado":"Pendiente"));
-  abrirCapturaPedido(null, {
+  abrirRegistroVenta({
     nombre: datos.clienteTexto || "",
     clienteSugerido,
-    deliveryDate: datos.fecha || HOY(),
+    soldAt: datos.fecha || HOY(),
     matches,
     note: [datos.notas, ...notaExtra].filter(Boolean).join(" · "),
+    paymentStatus: datos.estadoPago==="pagado"?"paid":"pending",
     foto, avisoRevision: datos.requiereRevision ? (datos.advertencias||[]) : null
   });
 }
@@ -2000,6 +2007,7 @@ function pintarInicio(){
   const r=rangoPeriodo("mes"), m=metricas(r.desde,r.hasta);
   const pendientes=pedidosPendientes().length, cxc=cuentasPorCobrar().reduce((s,x)=>s+x.saldo,0);
   const iconos={
+    venta:'<path d="M5 4h14v16H5zM8 8h8M8 12h5M15 15v5M12.5 17.5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     pedidos:'<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     scan:IC.escanear,
     gastos:'<path d="M4 7h16v11H4zM7 11h5M16 10v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
@@ -2011,6 +2019,7 @@ function pintarInicio(){
   const tile=(k,cl,t,sub,wide="")=>`<button class="menu-tile ${cl} ${wide}" data-menu="${k}"><svg viewBox="0 0 24 24">${iconos[k]}</svg><b>${t}<small>${sub}</small></b></button>`;
   $("v-inicio").innerHTML=`<div class="menu-hero"><h1>${saludo()}</h1><p>Todo Sierra Noble en un solo lugar.</p></div>
     <div class="menu-grid">
+      ${tile("venta","tile-verde","Registrar venta","Manual o con Scan","tile-wide")}
       ${tile("pedidos","tile-oro","Pedidos",pendientes?`${pendientes} por entregar`:"Crear y consultar","tile-wide")}
       ${tile("scan","tile-azul","Escanear","Compra o venta")}
       ${tile("gastos","tile-coral","Gastos","Salidas y pendientes")}
@@ -2022,7 +2031,7 @@ function pintarInicio(){
     </div>`;
   $("v-inicio").querySelectorAll("[data-menu]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.menu;
-    if(k==="pedidos")return irA("pedidos"); if(k==="scan")return iniciarScan(); if(k==="gastos")return irA("gastos"); if(k==="numeros")return irA("resumen");
+    if(k==="venta")return abrirEntradaVenta(); if(k==="pedidos")return irA("pedidos"); if(k==="scan")return iniciarScan(); if(k==="gastos")return irA("gastos"); if(k==="numeros")return irA("resumen");
     if(k==="clientes")return abrirClientes(); if(k==="articulos")return abrirProductos(); if(k==="cobrar")return abrirCuentasPorCobrar(); if(k==="cuenta")return abrirNube();
   });
 }
@@ -2309,6 +2318,98 @@ function abrirConfirmarEntrega(p, alTerminar){
    distribuidor, no como mostrador — todas las ventas entran como pedido. */
 
 /* ══ cobro ══ */
+/* Venta rapida: registra una venta realizada sin crear un pedido. */
+let rv=null, pasoRv=1;
+const PASOS_RV=3;
+
+function abrirEntradaVenta(){
+  abrirHoja({titulo:"Registrar venta", pie:false, render:f=>{
+    f.cuerpo.innerHTML = `<h2 class="pregunta">¿Cómo quieres registrarla?</h2>
+      <p class="ayuda">La venta queda separada de Pedidos.</p>
+      <button class="btn destacado" id="rv-manual" style="margin-bottom:10px">Captura manual</button>
+      <button class="btn claro" id="rv-scan">Escanear nota</button>
+      <div class="aviso" style="margin-top:16px">Manual y Scan permiten varios artículos, cantidades y precios distintos para cada cliente.</div>`;
+    $("rv-manual").onclick=()=>{ cerrarHoja(); setTimeout(()=>abrirRegistroVenta(),280); };
+    $("rv-scan").onclick=()=>{ cerrarHoja(); setTimeout(iniciarScan,280); };
+  }});
+}
+
+function abrirRegistroVenta(prefill={}){
+  rv={customerId:prefill.customerId||null, nombre:prefill.nombre||"", est:nuevaCesta(),
+    soldAt:prefill.soldAt||HOY(), paymentStatus:prefill.paymentStatus||"paid",
+    paymentMethod:prefill.paymentMethod||"cash", note:prefill.note||"",
+    clienteSugerido:prefill.clienteSugerido||null, fotoEscaneo:prefill.foto||null,
+    avisoEscaneo:prefill.avisoRevision||null};
+  if(rv.customerId){ const cl=clientePorId(rv.customerId); if(cl) rv.est.tier=cl.defaultPriceTier||"retail"; }
+  (prefill.matches||[]).forEach(m=>{ rv.est.cesta[m.productId]=m.cap; });
+  pasoRv=1;
+  abrirHoja({titulo:"Registrar venta", pie:true, render:f=>{
+    f.pie.innerHTML=`<div class="barra-t" id="rv-total" style="display:none"><span>Total</span><b id="rv-total-n">$0</b></div>
+      <button class="btn" id="rv-sig">Siguiente</button>`;
+    $("rv-sig").onclick=avanzarRegistroVenta;
+    f.cfg.alVolver=()=>{ if(pasoRv>1){pasoRv--;pintarPasoVenta();}else cerrarHoja(); };
+    pintarPasoVenta();
+  }});
+}
+
+function bloqueScanVenta(){
+  return (rv.avisoEscaneo&&rv.avisoEscaneo.length?`<div class="aviso rojo" style="margin-bottom:14px"><b>Esta es mi lectura. Revísala:</b><br>${rv.avisoEscaneo.map(esc).join("<br>")}</div>`:"")
+    +(rv.fotoEscaneo?`<img src="data:${rv.fotoEscaneo.mediaType};base64,${rv.fotoEscaneo.base64}" alt="Nota escaneada" style="width:100%;max-height:220px;object-fit:contain;border-radius:12px;margin-bottom:14px;background:#00000008">`:"");
+}
+
+function pintarPasoVenta(){
+  const f=hojaActual(); if(!f)return;
+  f.pasos.innerHTML=Array.from({length:PASOS_RV},(_,i)=>`<span class="pt ${i<pasoRv?"on":""}"></span>`).join("");
+  const c=f.cuerpo; c.scrollTop=0; const foto=bloqueScanVenta();
+  $("rv-sig").textContent=pasoRv===PASOS_RV?"Guardar venta":"Siguiente";
+  if(pasoRv===1){
+    c.innerHTML=`${foto}<h2 class="pregunta">Cliente y fecha</h2><p class="ayuda">Elige un cliente o escribe uno nuevo.</p>
+      <input class="txt" id="rv-cli" list="rv-clientes" placeholder="Nombre del cliente" value="${esc(rv.nombre)}" autocomplete="off">
+      <datalist id="rv-clientes">${D.customers.map(x=>`<option value="${esc(x.displayName)}"></option>`).join("")}</datalist>
+      ${rv.clienteSugerido&&!rv.customerId?`<button class="op col" id="rv-sug" style="margin-top:8px;border-color:var(--oro)"><strong>Usar cliente sugerido: ${esc(rv.clienteSugerido.cliente.displayName)}</strong><span class="men">${rv.clienteSugerido.porcentaje}% de coincidencia</span></button>`:""}
+      <div class="campo"><label>Fecha de venta</label><input class="txt" id="rv-fecha" type="date" value="${rv.soldAt}"></div>
+      <div class="campo"><label>Estado del pago</label><div class="par"><button data-pago="paid" aria-pressed="${rv.paymentStatus==="paid"}">Pagado</button><button data-pago="pending" aria-pressed="${rv.paymentStatus==="pending"}">Pendiente</button></div></div>
+      <div class="campo" id="rv-met-caja" style="display:${rv.paymentStatus==="paid"?"":"none"}"><label>Método de pago</label><div class="par">${METODOS_LISTA.map(m=>`<button data-met="${m}" aria-pressed="${rv.paymentMethod===m}">${METODOS[m]}</button>`).join("")}</div></div>`;
+    $("rv-cli").oninput=e=>{rv.nombre=e.target.value;rv.customerId=null;validarVentaRapida();};
+    $("rv-cli").onchange=e=>{const cl=clientePorNombre(e.target.value);if(cl){rv.customerId=cl.id;rv.nombre=cl.displayName;rv.est.tier=cl.defaultPriceTier||"retail";}validarVentaRapida();};
+    $("rv-fecha").onchange=e=>{if(e.target.value)rv.soldAt=e.target.value;};
+    const sug=$("rv-sug"); if(sug)sug.onclick=()=>{const cl=rv.clienteSugerido.cliente;rv.customerId=cl.id;rv.nombre=cl.displayName;rv.est.tier=cl.defaultPriceTier||"retail";rv.clienteSugerido=null;pintarPasoVenta();};
+    c.querySelectorAll("[data-pago]").forEach(b=>b.onclick=()=>{rv.paymentStatus=b.dataset.pago;pintarPasoVenta();});
+    c.querySelectorAll("[data-met]").forEach(b=>b.onclick=()=>{rv.paymentMethod=b.dataset.met;pintarPasoVenta();});
+  }
+  if(pasoRv===2){
+    c.innerHTML=`${foto}<h2 class="pregunta">Artículos de la venta</h2><p class="ayuda">Agrega uno o más. Puedes modificar el precio de cada uno.</p><div id="rv-sel"></div>`;
+    pintarSelector($("rv-sel"),rv.est,validarVentaRapida);
+  }
+  if(pasoRv===PASOS_RV){
+    const items=renglonesDe(rv.est), total=sumaRenglones(items);
+    c.innerHTML=`${foto}<h2 class="pregunta">Revisa la venta</h2><p class="ayuda">Nada se guarda hasta que confirmes.</p>
+      <div class="res"><div class="res-nom">${esc(rv.nombre)}</div><div class="res-sub">${fechaLarga(rv.soldAt)} · ${rv.paymentStatus==="paid"?"Pagado":"Pendiente de pago"}</div>${bloqueRenglones(items)}</div>
+      <div class="bloque"><div class="lin"><span>Total de la venta</span><b>${pesos(total.subtotal+total.tax)}</b></div><div class="lin"><span>Estado</span><b>${rv.paymentStatus==="paid"?METODOS[rv.paymentMethod]:"Por cobrar"}</b></div></div>`;
+  }
+  validarVentaRapida();
+}
+
+function validarVentaRapida(){
+  const b=$("rv-sig"); if(!b)return;
+  b.disabled=pasoRv===1?!rv.nombre.trim():renglonesDe(rv.est).length===0;
+  const bt=$("rv-total"); if(bt){const ver=pasoRv===2&&renglonesDe(rv.est).length>0;bt.style.display=ver?"flex":"none";if(ver){const t=totalDe(rv.est);$("rv-total-n").textContent=pesos(t.subtotal+t.tax);}}
+}
+
+async function avanzarRegistroVenta(){
+  if(pasoRv<PASOS_RV){pasoRv++;pintarPasoVenta();return;}
+  const items=renglonesDe(rv.est); if(!items.length){aviso("Agrega al menos un artículo","err");return;}
+  let cli=rv.customerId?clientePorId(rv.customerId):clientePorNombre(rv.nombre);
+  if(!cli)cli=altaClienteRapida(rv.nombre,rv.est.tier);
+  const base={id:null,customerId:cli?cli.id:null,customerNameSnapshot:rv.nombre.trim(),priceTier:rv.est.tier,items};
+  const venta=ventaDesde(D,base,{soldAt:rv.soldAt});
+  venta.source="quick_sale"; venta.note=rv.note; venta.updatedBy=ajustesSync().correo||"local";
+  D.sales.push(venta); descontarVenta(D,venta);
+  if(rv.paymentStatus==="paid")D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:venta.totalCents,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Venta rápida",status:"active",createdAt:ahora(),updatedAt:ahora()});
+  await guardar(); cerrarHoja(); irA("inicio");
+  pantallaConfirmado({titulo:"Venta registrada",sub:`${venta.folio} · ${esc(venta.customerNameSnapshot)} · ${rv.paymentStatus==="paid"?"pagada":"pendiente"}`,op:venta,whatsapp:true,venta});
+}
+
 function abrirCobro(saleId){
   const v = D.sales.find(x=>x.id===saleId); if(!v) return;
   let metodo="cash", monto=saldoDe(v);
