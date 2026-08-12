@@ -2392,8 +2392,16 @@ function abrirRegistroVenta(prefill={}){
   pasoRv=1;
   abrirHoja({titulo:"Registrar venta", pie:true, render:f=>{
     f.pie.innerHTML=`<div class="barra-t" id="rv-total" style="display:none"><span>Total</span><b id="rv-total-n">$0</b></div>
-      <button class="btn" id="rv-sig">Siguiente</button>`;
+      <button class="btn" id="rv-sig">Siguiente</button>
+      <div class="tres" id="rv-final" style="display:none">
+        <button class="btn" id="rv-confirmar">Confirmar venta</button>
+        <button class="btn claro" id="rv-editar">Editar</button>
+        <button class="btn claro" id="rv-cancelar" style="color:var(--rojo)">Cancelar</button>
+      </div>`;
     $("rv-sig").onclick=avanzarRegistroVenta;
+    $("rv-confirmar").onclick=avanzarRegistroVenta;
+    $("rv-editar").onclick=()=>{pasoRv=2;pintarPasoVenta();};
+    $("rv-cancelar").onclick=()=>{if(confirm("¿Cancelar esta venta sin guardar?"))cerrarHoja();};
     f.cfg.alVolver=()=>{ if(pasoRv>1){pasoRv--;pintarPasoVenta();}else cerrarHoja(); };
     pintarPasoVenta();
   }});
@@ -2408,7 +2416,9 @@ function pintarPasoVenta(){
   const f=hojaActual(); if(!f)return;
   f.pasos.innerHTML=Array.from({length:PASOS_RV},(_,i)=>`<span class="pt ${i<pasoRv?"on":""}"></span>`).join("");
   const c=f.cuerpo; c.scrollTop=0; const foto=bloqueScanVenta();
-  $("rv-sig").textContent=pasoRv===PASOS_RV?"Guardar venta":"Siguiente";
+  $("rv-sig").textContent="Siguiente";
+  $("rv-sig").style.display=pasoRv===PASOS_RV?"none":"";
+  $("rv-final").style.display=pasoRv===PASOS_RV?"flex":"none";
   if(pasoRv===1){
     c.innerHTML=`${foto}<h2 class="pregunta">Cliente y fecha</h2><p class="ayuda">Elige un cliente o escribe uno nuevo.</p>
       <input class="txt" id="rv-cli" list="rv-clientes" placeholder="Nombre del cliente" value="${esc(rv.nombre)}" autocomplete="off">
@@ -2453,8 +2463,8 @@ async function avanzarRegistroVenta(){
   venta.source="quick_sale"; venta.note=rv.note; venta.updatedBy=ajustesSync().correo||"local";
   D.sales.push(venta); descontarVenta(D,venta);
   if(rv.paymentStatus==="paid")D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:venta.totalCents,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Venta rápida",status:"active",createdAt:ahora(),updatedAt:ahora()});
-  await guardar(); cerrarHoja(); irA("inicio");
-  pantallaConfirmado({titulo:"Venta registrada",sub:`${venta.folio} · ${esc(venta.customerNameSnapshot)} · ${rv.paymentStatus==="paid"?"pagada":"pendiente"}`,op:venta,whatsapp:true,venta});
+  await guardar(); cerrarHoja(); irA("ventas");
+  aviso(`Venta ${venta.folio} registrada`,"ok");
 }
 
 function abrirCobro(saleId){
