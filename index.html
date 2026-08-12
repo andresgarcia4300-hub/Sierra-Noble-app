@@ -339,6 +339,7 @@ details summary{padding:13px 0;font-weight:700;cursor:pointer}
   <section class="vista on" id="v-inicio"></section>
   <section class="vista" id="v-pedidos"></section>
   <section class="vista" id="v-resumen"></section>
+  <section class="vista" id="v-ventas"></section>
   <section class="vista" id="v-gastos"></section>
   <section class="vista" id="v-mas"></section>
 </main>
@@ -1055,26 +1056,27 @@ function precioVentaDe(prod,tier,cap,tamano){
 
 /* cap = {modo:'piezas'|'peso'|'porcion'|'unidad', gramos, piezas, tamano, cantidad} */
 function renglonDeProducto(prod, tier, cap){
+  const costoBase = cap&&cap.customUnitCostCents!=null ? Math.max(0,Math.round(cap.customUnitCostCents)) : (prod.unitCostCents||0);
   if(prod.porciones && cap.modo==="porcion"){
     const n = Math.max(1, Math.round(cap.piezas||1));
     const tam = cap.tamano || prod.porciones[0].gramos;
     const gramos = n*tam;
     return armarRenglon({product:prod, nameSnapshot:prod.name, quantity:n, unit:"porción",
-      unitPriceCents:precioVentaDe(prod,tier,cap,tam), unitCostCents:Math.round((prod.unitCostCents||0)*tam/1000),
+      unitPriceCents:precioVentaDe(prod,tier,cap,tam), unitCostCents:Math.round(costoBase*tam/1000),
       taxRate:prod.taxRate||0, gramos, piezas:n, tamano:tam,
       stockUnits: gramos/1000, costoDesconocido:!!prod.costoDesconocido});
   }
   if(esPorPeso(prod)){
     const gramos = cap.modo==="piezas" ? Math.max(1,Math.round(cap.piezas||1))*(cap.tamano||500) : Math.max(0,cap.gramos||0);
     return armarRenglon({product:prod, nameSnapshot:prod.name, quantity:gramos/1000, unit:"kg",
-      unitPriceCents:precioVentaDe(prod,tier,cap), unitCostCents:prod.unitCostCents||0, taxRate:prod.taxRate||0,
+      unitPriceCents:precioVentaDe(prod,tier,cap), unitCostCents:costoBase, taxRate:prod.taxRate||0,
       gramos, piezas: cap.modo==="piezas"?Math.max(1,Math.round(cap.piezas||1)):null,
       tamano: cap.modo==="piezas"?(cap.tamano||500):null,
       stockUnits: gramos/1000, costoDesconocido:!!prod.costoDesconocido});
   }
   const c = Math.max(0, Number(cap.cantidad)||0);
   return armarRenglon({product:prod, nameSnapshot:prod.name, quantity:c, unit:UNIDADES[prod.saleUnit]||"pieza",
-    unitPriceCents:precioVentaDe(prod,tier,cap), unitCostCents:prod.unitCostCents||0, taxRate:prod.taxRate||0,
+    unitPriceCents:precioVentaDe(prod,tier,cap), unitCostCents:costoBase, taxRate:prod.taxRate||0,
     stockUnits:c, costoDesconocido:!!prod.costoDesconocido});
 }
 
@@ -1353,6 +1355,7 @@ function refrescar(){
   if(vistaActual==="inicio") pintarInicio();
   else if(vistaActual==="pedidos") pintarPedidos();
   else if(vistaActual==="resumen") pintarResumen();
+  else if(vistaActual==="ventas") pintarVentas();
   else if(vistaActual==="gastos") pintarGastos();
   else if(vistaActual==="mas") pintarMas();
 }
@@ -1630,6 +1633,9 @@ function filaProd(p, est, ix){
       <div class="campo" style="margin:0"><label>Precio de venta ${esPorPeso(p)&&!p.porciones?"por kg":""}</label>
         <div class="con-uni"><input class="num" data-precio-venta type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(precio)}"><span class="uni">MXN</span></div>
         <p class="pista">Editable para este cliente. Costo de compra: ${pesos(p.unitCostCents)}${esPorPeso(p)?"/kg":""}.</p></div>
+      ${est.editarCosto?`<div class="campo" style="margin:0"><label>Costo de compra ${esPorPeso(p)?"por kg":"por unidad"}</label>
+        <div class="con-uni"><input class="num" data-costo-compra type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(c.customUnitCostCents!=null?c.customUnitCostCents:(p.unitCostCents||0))}"><span class="uni">MXN</span></div>
+        <p class="pista">Solo cambia el margen de esta venta; no modifica el catálogo.</p></div>`:""}
       ${p.costoDesconocido?`<div class="aviso oro" style="font-size:13px;padding:9px 11px">Costo desconocido: la utilidad de este artículo no es confiable.</div>`:""}
       <div class="equiv"><em data-eq>${r?textoRenglon(r):""}</em><b data-imp>${r?pesos(r.subtotalCents):""}</b></div>
       <div data-alerta></div>
@@ -1678,10 +1684,14 @@ function engancharProd(cont, p, ix, est, alCambiar){
     else { const g=fila.querySelector("[data-gr]"); if(g) g.value = c.gramos||0; }
     refrescarFila();
   });
-  const pz=fila.querySelector("[data-pz]"), gr=fila.querySelector("[data-gr]"), ct=fila.querySelector("[data-cant]"), pv=fila.querySelector("[data-precio-venta]");
+  const pz=fila.querySelector("[data-pz]"), gr=fila.querySelector("[data-gr]"), ct=fila.querySelector("[data-cant]"), pv=fila.querySelector("[data-precio-venta]"), pc=fila.querySelector("[data-costo-compra]");
   if(pv){
     pv.oninput=()=>{const c=encender();c.customUnitPriceCents=Math.max(0,aCent(pv.value));refrescarFila();};
     pv.onfocus=()=>{encender();refrescarFila();};
+  }
+  if(pc){
+    pc.oninput=()=>{const c=encender();c.customUnitCostCents=Math.max(0,aCent(pc.value));refrescarFila();};
+    pc.onfocus=()=>{encender();refrescarFila();};
   }
   if(pz){
     const set = v=>{ const c=encender(); c.piezas=Math.max(1,Math.round(v)); pz.value=c.piezas;
@@ -2019,7 +2029,7 @@ function pintarInicio(){
   const tile=(k,cl,t,sub,wide="")=>`<button class="menu-tile ${cl} ${wide}" data-menu="${k}"><svg viewBox="0 0 24 24">${iconos[k]}</svg><b>${t}<small>${sub}</small></b></button>`;
   $("v-inicio").innerHTML=`<div class="menu-hero"><h1>${saludo()}</h1><p>Todo Sierra Noble en un solo lugar.</p></div>
     <div class="menu-grid">
-      ${tile("venta","tile-verde","Registrar venta","Manual o con Scan","tile-wide")}
+      ${tile("venta","tile-verde","Ventas","Historial y nueva venta","tile-wide")}
       ${tile("pedidos","tile-oro","Pedidos",pendientes?`${pendientes} por entregar`:"Crear y consultar","tile-wide")}
       ${tile("scan","tile-azul","Escanear","Compra o venta")}
       ${tile("gastos","tile-coral","Gastos","Salidas y pendientes")}
@@ -2031,7 +2041,7 @@ function pintarInicio(){
     </div>`;
   $("v-inicio").querySelectorAll("[data-menu]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.menu;
-    if(k==="venta")return abrirEntradaVenta(); if(k==="pedidos")return irA("pedidos"); if(k==="scan")return iniciarScan(); if(k==="gastos")return irA("gastos"); if(k==="numeros")return irA("resumen");
+    if(k==="venta")return irA("ventas"); if(k==="pedidos")return irA("pedidos"); if(k==="scan")return iniciarScan(); if(k==="gastos")return irA("gastos"); if(k==="numeros")return irA("resumen");
     if(k==="clientes")return abrirClientes(); if(k==="articulos")return abrirProductos(); if(k==="cobrar")return abrirCuentasPorCobrar(); if(k==="cuenta")return abrirNube();
   });
 }
@@ -2321,6 +2331,42 @@ function abrirConfirmarEntrega(p, alTerminar){
 /* Venta rapida: registra una venta realizada sin crear un pedido. */
 let rv=null, pasoRv=1;
 const PASOS_RV=3;
+let perVentas="mes";
+
+function pintarVentas(){
+  const r=rangoPeriodo(perVentas);
+  const l=ventasActivas().filter(v=>enRango(v.soldAt,r.desde,r.hasta)).sort((a,b)=>b.soldAt.localeCompare(a.soldAt));
+  const total=l.reduce((s,v)=>s+v.totalCents,0), costo=l.reduce((s,v)=>s+v.costTotalCents,0), utilidad=total-costo;
+  const cobrado=l.reduce((s,v)=>s+pagadoDe(v),0), pendiente=l.reduce((s,v)=>s+saldoDe(v),0);
+  const clientes={}, productos={};
+  l.forEach(v=>{
+    const ck=v.customerNameSnapshot||"Sin cliente";
+    clientes[ck]=clientes[ck]||{ventas:0,total:0}; clientes[ck].ventas++; clientes[ck].total+=v.totalCents;
+    v.items.forEach(i=>{const pk=i.nameSnapshot;productos[pk]=productos[pk]||{cantidad:0,total:0,utilidad:0};productos[pk].cantidad+=i.quantity;productos[pk].total+=i.subtotalCents;productos[pk].utilidad+=i.grossProfitCents;});
+  });
+  const topCliente=Object.entries(clientes).sort((a,b)=>b[1].total-a[1].total)[0];
+  const topProducto=Object.entries(productos).sort((a,b)=>b[1].total-a[1].total)[0];
+  $("v-ventas").innerHTML=`<button class="volver-inicio" id="ven-inicio">← Inicio</button><h1 class="titulo-v">Ventas</h1>
+    <p class="sub-v">Ventas rápidas y ventas generadas desde Pedidos.</p>
+    <div class="periodo">${[["hoy","Hoy"],["semana","Semana"],["mes","Mes"]].map(([k,t])=>`<button data-pv="${k}" aria-pressed="${perVentas===k}">${t}</button>`).join("")}</div>
+    <div class="bloque oscuro"><p class="bloque-t">Ventas del periodo</p><div class="cifra nt">${pesos(total)}</div>
+      <div class="lin"><span>Cobrado</span><b>${pesos(cobrado)}</b></div><div class="lin"><span>Por cobrar</span><b>${pesos(pendiente)}</b></div>
+      <div class="lin"><span>Ganancia bruta</span><b>${pesos(utilidad)}</b></div><div class="lin"><span>Margen</span><b>${total?pct(utilidad,total):"—"}</b></div></div>
+    <button class="btn" id="nueva-venta" style="margin-bottom:14px">+ Agregar venta</button>
+    ${l.length?`<div class="bloque"><p class="bloque-t">Smart · comportamiento</p>
+      ${topProducto?`<div class="lin"><span>Artículo con más venta<br><small>${esc(topProducto[0])}</small></span><b>${pesos(topProducto[1].total)}</b></div>`:""}
+      ${topCliente?`<div class="lin"><span>Cliente principal<br><small>${esc(topCliente[0])} · ${topCliente[1].ventas} compra${topCliente[1].ventas===1?"":"s"}</small></span><b>${pesos(topCliente[1].total)}</b></div>`:""}
+      <p class="pista" style="margin-top:10px">Se calcula automáticamente con las ventas registradas en este periodo.</p></div>`:""}
+    ${l.length?l.map(v=>`<button class="fila borde ${estadoPago(v)==="paid"?"":"deb"}" data-v="${v.id}">
+      <div class="f-top"><span class="f-nom">${esc(v.customerNameSnapshot)}</span><span class="etq" style="margin-left:auto">${v.sourceOrderId?"Pedido":"Venta rápida"}</span></div>
+      <div class="f-det">${esc(textoItems(v))}</div><div class="f-pie"><span class="etq">${v.folio}</span><span style="font-size:13px;color:var(--tinta-40)">${fechaCorta(v.soldAt)}</span>
+      <span class="etq ${estadoPago(v)==="paid"?"verde":estadoPago(v)==="partial"?"oro":"rojo"}">${ETIQ_PAGO[estadoPago(v)]}</span><span class="f-tot">${pesos(v.totalCents)}</span></div></button>`).join("")
+      :vacio("Sin ventas en el periodo","Agrega una venta manualmente o escanea una nota.")}`;
+  $("ven-inicio").onclick=()=>irA("inicio");
+  $("nueva-venta").onclick=abrirEntradaVenta;
+  $("v-ventas").querySelectorAll("[data-pv]").forEach(b=>b.onclick=()=>{perVentas=b.dataset.pv;pintarVentas();});
+  $("v-ventas").querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>abrirDetalleVenta(b.dataset.v));
+}
 
 function abrirEntradaVenta(){
   abrirHoja({titulo:"Registrar venta", pie:false, render:f=>{
@@ -2340,6 +2386,7 @@ function abrirRegistroVenta(prefill={}){
     paymentMethod:prefill.paymentMethod||"cash", note:prefill.note||"",
     clienteSugerido:prefill.clienteSugerido||null, fotoEscaneo:prefill.foto||null,
     avisoEscaneo:prefill.avisoRevision||null};
+  rv.est.editarCosto=true;
   if(rv.customerId){ const cl=clientePorId(rv.customerId); if(cl) rv.est.tier=cl.defaultPriceTier||"retail"; }
   (prefill.matches||[]).forEach(m=>{ rv.est.cesta[m.productId]=m.cap; });
   pasoRv=1;
@@ -2378,7 +2425,7 @@ function pintarPasoVenta(){
     c.querySelectorAll("[data-met]").forEach(b=>b.onclick=()=>{rv.paymentMethod=b.dataset.met;pintarPasoVenta();});
   }
   if(pasoRv===2){
-    c.innerHTML=`${foto}<h2 class="pregunta">Artículos de la venta</h2><p class="ayuda">Agrega uno o más. Puedes modificar el precio de cada uno.</p><div id="rv-sel"></div>`;
+    c.innerHTML=`${foto}<h2 class="pregunta">Artículos de la venta</h2><p class="ayuda">Agrega uno o más. Puedes modificar tanto el precio de venta como el costo de compra para calcular bien tu ganancia.</p><div id="rv-sel"></div>`;
     pintarSelector($("rv-sel"),rv.est,validarVentaRapida);
   }
   if(pasoRv===PASOS_RV){
