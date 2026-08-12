@@ -2395,20 +2395,33 @@ function abrirEntradaVenta(){
 }
 
 function abrirRegistroVenta(prefill={}){
-  rv={customerId:prefill.customerId||null, nombre:prefill.nombre||"", est:nuevaCesta(),
-    soldAt:prefill.soldAt||HOY(), paymentStatus:prefill.paymentStatus||"paid",
+  const original=prefill.editSaleId?D.sales.find(v=>v.id===prefill.editSaleId):null;
+  rv={editando:original?original.id:null, customerId:original?original.customerId:(prefill.customerId||null), nombre:original?original.customerNameSnapshot:(prefill.nombre||""), est:nuevaCesta(),
+    soldAt:original?original.soldAt:(prefill.soldAt||HOY()), paymentStatus:original?(pagadoDe(original)>0?"paid":"pending"):(prefill.paymentStatus||"paid"),
     paymentMethod:prefill.paymentMethod||"cash", note:prefill.note||"",
     clienteSugerido:prefill.clienteSugerido||null, fotoEscaneo:prefill.foto||null,
-    avisoEscaneo:prefill.avisoRevision||null};
+    avisoEscaneo:prefill.avisoRevision||null, discountCents:original?(original.discountCents||0):0};
   rv.est.editarCosto=true;
+  if(original){
+    rv.est.tier=original.priceTier||"retail"; rv.note=original.note||""; rv.tieneCobros=pagadoDe(original)>0;
+    const ultimoPago=pagosDe(original)[0]; if(ultimoPago)rv.paymentMethod=ultimoPago.method||"cash";
+    original.items.forEach(i=>{if(!i.productId)return;const p=D.products.find(x=>x.id===i.productId);if(!p)return;
+      const cap=i.unit==="porción"?{modo:"porcion",piezas:i.piezas||1,tamano:i.tamano}
+        :i.unit==="kg"?(i.piezas?{modo:"piezas",piezas:i.piezas,tamano:i.tamano,gramos:i.gramos}:{modo:"peso",gramos:i.gramos!=null?i.gramos:i.quantity*1000})
+        :{modo:"unidad",cantidad:i.quantity};
+      cap.customUnitPriceCents=i.unitPriceCents;
+      cap.customUnitCostCents=i.unit==="porción"&&i.tamano?Math.round(i.unitCostCents*1000/i.tamano):i.unitCostCents;
+      rv.est.cesta[i.productId]=cap;
+    });
+  }
   if(rv.customerId){ const cl=clientePorId(rv.customerId); if(cl) rv.est.tier=cl.defaultPriceTier||"retail"; }
   (prefill.matches||[]).forEach(m=>{ rv.est.cesta[m.productId]=m.cap; });
   pasoRv=1;
-  abrirHoja({titulo:"Registrar venta", pie:true, render:f=>{
+  abrirHoja({titulo:original?"Editar venta "+original.folio:"Registrar venta", pie:true, render:f=>{
     f.pie.innerHTML=`<div class="barra-t" id="rv-total" style="display:none"><span>Total</span><b id="rv-total-n">$0</b></div>
       <button class="btn" id="rv-sig">Siguiente</button>
       <div class="tres" id="rv-final" style="display:none">
-        <button class="btn" id="rv-confirmar">Confirmar venta</button>
+        <button class="btn" id="rv-confirmar">${original?"Guardar cambios":"Confirmar venta"}</button>
         <button class="btn claro" id="rv-editar">Editar</button>
         <button class="btn claro" id="rv-cancelar" style="color:var(--rojo)">Cancelar</button>
       </div>`;
@@ -2439,7 +2452,7 @@ function pintarPasoVenta(){
       <datalist id="rv-clientes">${D.customers.map(x=>`<option value="${esc(x.displayName)}"></option>`).join("")}</datalist>
       ${rv.clienteSugerido&&!rv.customerId?`<button class="op col" id="rv-sug" style="margin-top:8px;border-color:var(--oro)"><strong>Usar cliente sugerido: ${esc(rv.clienteSugerido.cliente.displayName)}</strong><span class="men">${rv.clienteSugerido.porcentaje}% de coincidencia</span></button>`:""}
       <div class="campo"><label>Fecha de venta</label><input class="txt" id="rv-fecha" type="date" value="${rv.soldAt}"></div>
-      <div class="campo"><label>Estado del pago</label><div class="par"><button data-pago="paid" aria-pressed="${rv.paymentStatus==="paid"}">Pagado</button><button data-pago="pending" aria-pressed="${rv.paymentStatus==="pending"}">Pendiente</button></div></div>
+      <div class="campo"><label>Estado del pago</label><div class="par"><button data-pago="paid" aria-pressed="${rv.paymentStatus==="paid"}" ${rv.tieneCobros?"disabled":""}>Pagado</button><button data-pago="pending" aria-pressed="${rv.paymentStatus==="pending"}" ${rv.tieneCobros?"disabled":""}>Pendiente</button></div>${rv.tieneCobros?`<p class="pista">Esta venta ya tiene ${pesos(pagadoDe(D.sales.find(v=>v.id===rv.editando)))} cobrado. Los cobros se conservan y se administran desde el detalle.</p>`:""}</div>
       <div class="campo" id="rv-met-caja" style="display:${rv.paymentStatus==="paid"?"":"none"}"><label>Método de pago</label><div class="par">${METODOS_LISTA.map(m=>`<button data-met="${m}" aria-pressed="${rv.paymentMethod===m}">${METODOS[m]}</button>`).join("")}</div></div>`;
     $("rv-cli").oninput=e=>{rv.nombre=e.target.value;rv.customerId=null;validarVentaRapida();};
     $("rv-cli").onchange=e=>{const cl=clientePorNombre(e.target.value);if(cl){rv.customerId=cl.id;rv.nombre=cl.displayName;rv.est.tier=cl.defaultPriceTier||"retail";}validarVentaRapida();};
@@ -2455,8 +2468,8 @@ function pintarPasoVenta(){
   if(pasoRv===PASOS_RV){
     const items=renglonesDe(rv.est), total=sumaRenglones(items);
     c.innerHTML=`${foto}<h2 class="pregunta">Revisa la venta</h2><p class="ayuda">Nada se guarda hasta que confirmes.</p>
-      <div class="res"><div class="res-nom">${esc(rv.nombre)}</div><div class="res-sub">${fechaLarga(rv.soldAt)} · ${rv.paymentStatus==="paid"?"Pagado":"Pendiente de pago"}</div>${bloqueRenglones(items)}</div>
-      <div class="bloque"><div class="lin"><span>Total de la venta</span><b>${pesos(total.subtotal+total.tax)}</b></div><div class="lin"><span>Estado</span><b>${rv.paymentStatus==="paid"?METODOS[rv.paymentMethod]:"Por cobrar"}</b></div></div>`;
+      <div class="res"><div class="res-nom">${esc(rv.nombre)}</div><div class="res-sub">${fechaLarga(rv.soldAt)} · ${rv.paymentStatus==="paid"?"Pagado":"Pendiente de pago"}</div>${bloqueRenglones(items,{discountCents:rv.discountCents})}</div>
+      <div class="bloque"><div class="lin"><span>Total de la venta</span><b>${pesos(total.subtotal-rv.discountCents+total.tax)}</b></div><div class="lin"><span>Estado</span><b>${rv.paymentStatus==="paid"?METODOS[rv.paymentMethod]:"Por cobrar"}</b></div></div>`;
   }
   validarVentaRapida();
 }
@@ -2464,7 +2477,7 @@ function pintarPasoVenta(){
 function validarVentaRapida(){
   const b=$("rv-sig"); if(!b)return;
   b.disabled=pasoRv===1?!rv.nombre.trim():renglonesDe(rv.est).length===0;
-  const bt=$("rv-total"); if(bt){const ver=pasoRv===2&&renglonesDe(rv.est).length>0;bt.style.display=ver?"flex":"none";if(ver){const t=totalDe(rv.est);$("rv-total-n").textContent=pesos(t.subtotal+t.tax);}}
+  const bt=$("rv-total"); if(bt){const ver=pasoRv===2&&renglonesDe(rv.est).length>0;bt.style.display=ver?"flex":"none";if(ver){const t=totalDe(rv.est);$("rv-total-n").textContent=pesos(t.subtotal-rv.discountCents+t.tax);}}
 }
 
 async function avanzarRegistroVenta(){
@@ -2472,7 +2485,17 @@ async function avanzarRegistroVenta(){
   const items=renglonesDe(rv.est); if(!items.length){aviso("Agrega al menos un artículo","err");return;}
   let cli=rv.customerId?clientePorId(rv.customerId):clientePorNombre(rv.nombre);
   if(!cli)cli=altaClienteRapida(rv.nombre,rv.est.tier);
-  let venta=rv.ventaPendiente?D.sales.find(v=>v.id===rv.ventaPendiente):null;
+  let venta=rv.editando?D.sales.find(v=>v.id===rv.editando):(rv.ventaPendiente?D.sales.find(v=>v.id===rv.ventaPendiente):null);
+  if(rv.editando&&venta){
+    const t=sumaRenglones(items), nuevoTotal=t.subtotal-rv.discountCents+t.tax, cobrado=pagadoDe(venta);
+    if(nuevoTotal<cobrado){aviso(`El nuevo total no puede ser menor que lo ya cobrado (${pesos(cobrado)}). Corrige el total o los cobros.`,"err",8000);return;}
+    reajustarStock(D,venta,items,"corrección de venta");
+    venta.customerId=cli?cli.id:null;venta.customerNameSnapshot=rv.nombre.trim();venta.priceTier=rv.est.tier;venta.soldAt=rv.soldAt;venta.note=rv.note;
+    venta.subtotalCents=t.subtotal;venta.discountCents=rv.discountCents;venta.taxCents=t.tax;venta.totalCents=nuevoTotal;venta.costTotalCents=t.costo;venta.grossProfitCents=t.subtotal-rv.discountCents-t.costo;
+    if(venta.invoiceRequested&&cli)venta.fiscalCustomerSnapshot={legalName:cli.legalName,rfc:cli.rfc,fiscalZipCode:cli.fiscalZipCode,fiscalRegime:cli.fiscalRegime,defaultCfdiUse:cli.defaultCfdiUse,billingEmail:cli.billingEmail};
+    venta.updatedBy=ajustesSync().correo||"local";tocar(venta);
+    if(!cobrado&&rv.paymentStatus==="paid")D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:venta.totalCents,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Pago al editar venta",status:"active",createdAt:ahora(),updatedAt:ahora()});
+  }
   if(!venta){
     const base={id:null,customerId:cli?cli.id:null,customerNameSnapshot:rv.nombre.trim(),priceTier:rv.est.tier,items};
     venta=ventaDesde(D,base,{soldAt:rv.soldAt});
@@ -2488,9 +2511,9 @@ async function avanzarRegistroVenta(){
     const copia=await Disco.leer(CLAVE);
     confirmada=!!(copia&&Array.isArray(copia.sales)&&copia.sales.some(v=>v.id===venta.id));
   }
-  if(!confirmada){if(confirmar){confirmar.disabled=false;confirmar.textContent="Confirmar venta";}aviso("La venta no pudo comprobarse. No cierres esta pantalla e intenta confirmar nuevamente.","err",9000);return;}
+  if(!confirmada){if(confirmar){confirmar.disabled=false;confirmar.textContent=rv.editando?"Guardar cambios":"Confirmar venta";}aviso("La venta no pudo comprobarse. No cierres esta pantalla e intenta confirmar nuevamente.","err",9000);return;}
   cerrarHoja(); fechaVentas=venta.soldAt; perVentas="dia"; buscarVentas=""; irA("ventas");
-  aviso(`Venta ${venta.folio} guardada y comprobada`,"ok",5000);
+  aviso(`Venta ${venta.folio} ${rv.editando?"actualizada":"guardada"} y comprobada`,"ok",5000);
 }
 
 function abrirCobro(saleId){
@@ -2559,9 +2582,10 @@ function pintarDetalleVenta(f, id){
       <div class="par"><button id="v-f-no" aria-pressed="${!v.invoiceRequested}">No requiere</button>
         <button id="v-f-si" aria-pressed="${v.invoiceRequested}">Sí requiere</button></div>
       ${v.invoiceRequested?`<p class="pista" style="margin-top:11px">Estado: <b>${EST_FACTURA[v.invoiceStatus]}</b>. Se administra en Más › Por facturar.</p>`:""}</div>
-    <div class="acciones"><button class="btn claro" id="v-cancel" style="color:var(--rojo)">Cancelar venta</button></div>`}`;
+    <div class="acciones"><button class="btn" id="v-editar">Editar venta</button><button class="btn claro" id="v-cancel" style="color:var(--rojo)">Cancelar venta</button></div>`}`;
   const c=$("v-cobrar"); if(c) c.onclick=()=>{ cerrarHoja(); abrirCobro(v.id); };
   const vl=$("v-ligar"); if(vl) vl.onclick=()=>abrirLigarNotas(v.id);
+  const ve=$("v-editar"); if(ve) ve.onclick=()=>{cerrarHoja();setTimeout(()=>abrirRegistroVenta({editSaleId:v.id}),280);};
   const fs=$("v-f-si"), fn=$("v-f-no");
   if(fs) fs.onclick = async ()=>{
     v.invoiceRequested=true; tocar(v);
