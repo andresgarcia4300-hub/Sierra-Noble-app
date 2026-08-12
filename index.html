@@ -2397,13 +2397,13 @@ function abrirEntradaVenta(){
 function abrirRegistroVenta(prefill={}){
   const original=prefill.editSaleId?D.sales.find(v=>v.id===prefill.editSaleId):null;
   rv={editando:original?original.id:null, customerId:original?original.customerId:(prefill.customerId||null), nombre:original?original.customerNameSnapshot:(prefill.nombre||""), est:nuevaCesta(),
-    soldAt:original?original.soldAt:(prefill.soldAt||HOY()), paymentStatus:original?(pagadoDe(original)>0?"paid":"pending"):(prefill.paymentStatus||"paid"),
+    soldAt:original?original.soldAt:(prefill.soldAt||HOY()), paymentStatus:original?(estadoPago(original)==="paid"?"paid":"pending"):(prefill.paymentStatus||"paid"),
     paymentMethod:prefill.paymentMethod||"cash", note:prefill.note||"",
     clienteSugerido:prefill.clienteSugerido||null, fotoEscaneo:prefill.foto||null,
     avisoEscaneo:prefill.avisoRevision||null, discountCents:original?(original.discountCents||0):0};
   rv.est.editarCosto=true;
   if(original){
-    rv.est.tier=original.priceTier||"retail"; rv.note=original.note||""; rv.tieneCobros=pagadoDe(original)>0;
+    rv.est.tier=original.priceTier||"retail"; rv.note=original.note||""; rv.tieneCobros=pagadoDe(original)>0; rv.originalPaymentStatus=estadoPago(original)==="paid"?"paid":"pending";
     const ultimoPago=pagosDe(original)[0]; if(ultimoPago)rv.paymentMethod=ultimoPago.method||"cash";
     original.items.forEach(i=>{if(!i.productId)return;const p=D.products.find(x=>x.id===i.productId);if(!p)return;
       const cap=i.unit==="porción"?{modo:"porcion",piezas:i.piezas||1,tamano:i.tamano}
@@ -2452,7 +2452,9 @@ function pintarPasoVenta(){
       <datalist id="rv-clientes">${D.customers.map(x=>`<option value="${esc(x.displayName)}"></option>`).join("")}</datalist>
       ${rv.clienteSugerido&&!rv.customerId?`<button class="op col" id="rv-sug" style="margin-top:8px;border-color:var(--oro)"><strong>Usar cliente sugerido: ${esc(rv.clienteSugerido.cliente.displayName)}</strong><span class="men">${rv.clienteSugerido.porcentaje}% de coincidencia</span></button>`:""}
       <div class="campo"><label>Fecha de venta</label><input class="txt" id="rv-fecha" type="date" value="${rv.soldAt}"></div>
-      <div class="campo"><label>Estado del pago</label><div class="par"><button data-pago="paid" aria-pressed="${rv.paymentStatus==="paid"}" ${rv.tieneCobros?"disabled":""}>Pagado</button><button data-pago="pending" aria-pressed="${rv.paymentStatus==="pending"}" ${rv.tieneCobros?"disabled":""}>Pendiente</button></div>${rv.tieneCobros?`<p class="pista">Esta venta ya tiene ${pesos(pagadoDe(D.sales.find(v=>v.id===rv.editando)))} cobrado. Los cobros se conservan y se administran desde el detalle.</p>`:""}</div>
+      <div class="campo"><label>Estado del pago</label><div class="par"><button data-pago="paid" aria-pressed="${rv.paymentStatus==="paid"}">Pagado</button><button data-pago="pending" aria-pressed="${rv.paymentStatus==="pending"}">Pendiente por pagar</button></div>
+        ${rv.editando&&rv.originalPaymentStatus==="paid"&&rv.paymentStatus==="pending"?`<div class="aviso rojo" style="margin-top:9px">El cobro registrado por error se anulará y la venta aparecerá en Por cobrar.</div>`:""}
+        ${rv.editando&&rv.originalPaymentStatus==="pending"&&rv.paymentStatus==="paid"?`<div class="aviso" style="margin-top:9px">Se registrará como cobrado el saldo pendiente con el método seleccionado.</div>`:""}</div>
       <div class="campo" id="rv-met-caja" style="display:${rv.paymentStatus==="paid"?"":"none"}"><label>Método de pago</label><div class="par">${METODOS_LISTA.map(m=>`<button data-met="${m}" aria-pressed="${rv.paymentMethod===m}">${METODOS[m]}</button>`).join("")}</div></div>`;
     $("rv-cli").oninput=e=>{rv.nombre=e.target.value;rv.customerId=null;validarVentaRapida();};
     $("rv-cli").onchange=e=>{const cl=clientePorNombre(e.target.value);if(cl){rv.customerId=cl.id;rv.nombre=cl.displayName;rv.est.tier=cl.defaultPriceTier||"retail";}validarVentaRapida();};
@@ -2488,13 +2490,18 @@ async function avanzarRegistroVenta(){
   let venta=rv.editando?D.sales.find(v=>v.id===rv.editando):(rv.ventaPendiente?D.sales.find(v=>v.id===rv.ventaPendiente):null);
   if(rv.editando&&venta){
     const t=sumaRenglones(items), nuevoTotal=t.subtotal-rv.discountCents+t.tax, cobrado=pagadoDe(venta);
-    if(nuevoTotal<cobrado){aviso(`El nuevo total no puede ser menor que lo ya cobrado (${pesos(cobrado)}). Corrige el total o los cobros.`,"err",8000);return;}
+    const anularCobroErroneo=rv.originalPaymentStatus==="paid"&&rv.paymentStatus==="pending";
+    if(!anularCobroErroneo&&nuevoTotal<cobrado){aviso(`El nuevo total no puede ser menor que lo ya cobrado (${pesos(cobrado)}). Corrige el total o marca Pendiente para anular el cobro incorrecto.`,"err",8000);return;}
     reajustarStock(D,venta,items,"corrección de venta");
     venta.customerId=cli?cli.id:null;venta.customerNameSnapshot=rv.nombre.trim();venta.priceTier=rv.est.tier;venta.soldAt=rv.soldAt;venta.note=rv.note;
     venta.subtotalCents=t.subtotal;venta.discountCents=rv.discountCents;venta.taxCents=t.tax;venta.totalCents=nuevoTotal;venta.costTotalCents=t.costo;venta.grossProfitCents=t.subtotal-rv.discountCents-t.costo;
     if(venta.invoiceRequested&&cli)venta.fiscalCustomerSnapshot={legalName:cli.legalName,rfc:cli.rfc,fiscalZipCode:cli.fiscalZipCode,fiscalRegime:cli.fiscalRegime,defaultCfdiUse:cli.defaultCfdiUse,billingEmail:cli.billingEmail};
     venta.updatedBy=ajustesSync().correo||"local";tocar(venta);
-    if(!cobrado&&rv.paymentStatus==="paid")D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:venta.totalCents,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Pago al editar venta",status:"active",createdAt:ahora(),updatedAt:ahora()});
+    if(anularCobroErroneo)pagosDe(venta.id).forEach(p=>{p.status="cancelled";p.note=[p.note,"Anulado al corregir venta a pendiente"].filter(Boolean).join(" · ");tocar(p);});
+    else if(rv.paymentStatus==="paid"){
+      const faltante=saldoDe(venta);
+      if(faltante>0)D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:faltante,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Pago al editar venta",status:"active",createdAt:ahora(),updatedAt:ahora()});
+    }
   }
   if(!venta){
     const base={id:null,customerId:cli?cli.id:null,customerNameSnapshot:rv.nombre.trim(),priceTier:rv.est.tier,items};
