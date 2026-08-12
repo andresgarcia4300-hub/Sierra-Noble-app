@@ -352,7 +352,7 @@ details summary{padding:13px 0;font-weight:700;cursor:pointer}
    SIERRA NOBLE · MVP local · schemaVersion 2
    ══════════════════════════════════════════════════════════ */
 const NEGOCIO_DEF = "Sierra Noble";     // ← una línea por cliente
-const SCHEMA = 2;
+const SCHEMA = 3;
 const CLAVE = "sierra-noble";
 const CLAVE_V1 = "centinela-queseria-v1";
 
@@ -776,7 +776,7 @@ function abrirRevisionCompraScan(datos, foto, productos, lineas){
       const totalCents=scanItems.reduce((s,i)=>s+i.amountCents,0);
       const catMP=D.expenseCategories.find(c=>c.name==="Materia prima")||D.expenseCategories[0];
       cerrarHoja();
-      abrirGasto(null,{concept:scanItems.map(i=>`${numBonito(i.quantityKg)} kg ${i.nameSnapshot}`).join("; "),amountCents:totalCents,date:datos.fecha||HOY(),categoryId:catMP?catMP.id:undefined,supplier:datos.clienteTexto||"La Herradura",items:scanItems,
+      abrirGasto(null,{concept:scanItems.map(i=>`${numBonito(i.quantityKg)} kg ${i.nameSnapshot}`).join("; "),amountCents:totalCents,date:datos.fecha||HOY(),categoryId:catMP?catMP.id:undefined,supplier:datos.clienteTexto||"La Herradura",items:scanItems,purchaseNoteNumber:datos.folio||"",
         paymentStatus:datos.estadoPago==="pendiente"?"pending":"paid",
         note:[datos.notas,datos.folio?("Folio "+datos.folio):null,`Scan revisado por ${aprobador}`].filter(Boolean).join(" · "),foto});
     };
@@ -939,7 +939,7 @@ function baseVacia(){
     schemaVersion: SCHEMA,
     settings: {negocio:NEGOCIO_DEF, folios:{order:0,sale:0,expense:0}, defaultTaxRate:0,
       emisor:{legalName:"",rfc:"",fiscalRegime:"",fiscalZipCode:""}, creado:ahora()},
-    products:[], customers:[], orders:[], sales:[], payments:[], expenses:[], expenseCategories:[], stockMoves:[]
+    products:[], customers:[], orders:[], sales:[], payments:[], expenses:[], cashCounts:[], expenseCategories:[], stockMoves:[]
   };
 }
 function folioEn(base, tipo, pref){
@@ -2025,6 +2025,7 @@ function pintarInicio(){
     clientes:'<circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 8.5h5M18.5 6v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     articulos:'<path d="M4 7 12 3l8 4-8 4-8-4Zm0 5 8 4 8-4M4 16l8 4 8-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
     cobrar:'<path d="M4 6h16v12H4zM8 10h8M8 14h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    caja:'<path d="M3 7h18v12H3zM6 4h12v3M7 11h5M16 10v6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
     cuenta:'<circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 20c.6-4.6 2.9-7 7-7s6.4 2.4 7 7" fill="none" stroke="currentColor" stroke-width="1.8"/>'};
   const tile=(k,cl,t,sub,wide="")=>`<button class="menu-tile ${cl} ${wide}" data-menu="${k}"><svg viewBox="0 0 24 24">${iconos[k]}</svg><b>${t}<small>${sub}</small></b></button>`;
   $("v-inicio").innerHTML=`<div class="menu-hero"><h1>${saludo()}</h1><p>Todo Sierra Noble en un solo lugar.</p></div>
@@ -2037,12 +2038,13 @@ function pintarInicio(){
       ${tile("clientes","tile-violeta","Clientes",`${D.customers.length} registrados`)}
       ${tile("articulos","tile-cielo","Artículos",`${D.products.filter(p=>p.active).length} activos`)}
       ${tile("cobrar","tile-rojo","Por cobrar",cxc?pesos(cxc):"Todo cobrado")}
+      ${tile("caja","tile-oro","Caja","Efectivo y pagos pendientes")}
       ${tile("cuenta","tile-tinta","Cuenta",ajustesSync().correo||"Sin sesión")}
     </div>`;
   $("v-inicio").querySelectorAll("[data-menu]").forEach(b=>b.onclick=()=>{
     const k=b.dataset.menu;
     if(k==="venta")return irA("ventas"); if(k==="pedidos")return irA("pedidos"); if(k==="scan")return iniciarScan(); if(k==="gastos")return irA("gastos"); if(k==="numeros")return irA("resumen");
-    if(k==="clientes")return abrirClientes(); if(k==="articulos")return abrirProductos(); if(k==="cobrar")return abrirCuentasPorCobrar(); if(k==="cuenta")return abrirNube();
+    if(k==="clientes")return abrirClientes(); if(k==="articulos")return abrirProductos(); if(k==="cobrar")return abrirCuentasPorCobrar(); if(k==="caja")return abrirCaja(); if(k==="cuenta")return abrirNube();
   });
 }
 
@@ -2538,10 +2540,15 @@ function abrirDetalleVenta(id){ abrirHoja({titulo:"Venta", render:f=>pintarDetal
 function pintarDetalleVenta(f, id){
   const v = D.sales.find(x=>x.id===id); if(!v){ cerrarHoja(); return; }
   const pagos = pagosDe(v.id), saldo = saldoDe(v), ep = estadoPago(v);
+  const comprasLigadas=(v.purchaseExpenseIds||[]).map(x=>D.expenses.find(g=>g.id===x)).filter(Boolean);
   f.cuerpo.innerHTML = `
     <div class="res"><div class="res-nom">${esc(v.customerNameSnapshot)}</div>
       <div class="res-sub">${v.folio} · ${fechaLarga(v.soldAt)} · ${v.priceTier==="wholesale"?"mayoreo":"menudeo"}</div>
       ${bloqueRenglones(v.items,{discountCents:v.discountCents})}</div>
+    <div class="bloque"><p class="bloque-t">Cruce de notas</p>
+      <div class="lin"><span>Nota de venta</span><b>${esc(v.saleNoteNumber||v.folio)}</b></div>
+      ${comprasLigadas.length?comprasLigadas.map(g=>`<div class="lin"><span>${esc(g.purchaseNoteNumber||g.folio)} · ${fechaCorta(g.date)}</span><b>${pesos(g.amountCents)}</b></div>`).join(""):`<p class="ayuda" style="margin:0 0 10px">Aún no está ligada a una nota de compra.</p>`}
+      ${v.status!=="cancelled"?`<button class="btn claro chico" id="v-ligar">Ligar nota de compra</button>`:""}</div>
     ${v.status==="cancelled"?`<div class="aviso rojo">Venta cancelada. ${esc(v.cancellationReason||"")}</div>`:`
     <div class="bloque"><p class="bloque-t">Cobros</p>
       ${pagos.length? pagos.map(p=>`<div class="lin"><span>${fechaCorta(p.paidAt)} · ${METODOS[p.method]}</span><b>${pesos(p.amountCents)}</b></div>`).join("")
@@ -2554,6 +2561,7 @@ function pintarDetalleVenta(f, id){
       ${v.invoiceRequested?`<p class="pista" style="margin-top:11px">Estado: <b>${EST_FACTURA[v.invoiceStatus]}</b>. Se administra en Más › Por facturar.</p>`:""}</div>
     <div class="acciones"><button class="btn claro" id="v-cancel" style="color:var(--rojo)">Cancelar venta</button></div>`}`;
   const c=$("v-cobrar"); if(c) c.onclick=()=>{ cerrarHoja(); abrirCobro(v.id); };
+  const vl=$("v-ligar"); if(vl) vl.onclick=()=>abrirLigarNotas(v.id);
   const fs=$("v-f-si"), fn=$("v-f-no");
   if(fs) fs.onclick = async ()=>{
     v.invoiceRequested=true; tocar(v);
@@ -2592,6 +2600,44 @@ function abrirCuentasPorCobrar(){
           <span class="f-tot">${pesos(x.saldo)}</span></div></button>`).join("")
         : vacio("Todo cobrado","No hay ventas con saldo pendiente.")}`;
     f.cuerpo.querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>abrirDetalleVenta(b.dataset.v));
+  }});
+}
+
+/* Cruce entre notas de compra y ventas/clientes. */
+function comprasParaLigar(){
+  return D.expenses.filter(g=>g.status==="active"&&esCompraMercancia(g)).sort((a,b)=>b.date.localeCompare(a.date));
+}
+function ventasLigadasACompra(gid){ return ventasActivas().filter(v=>(v.purchaseExpenseIds||[]).includes(gid)); }
+function abrirLigarNotas(ventaId){
+  const v=D.sales.find(x=>x.id===ventaId); if(!v)return;
+  abrirHoja({titulo:"Cruzar notas", pie:true, render:f=>{
+    const compras=comprasParaLigar();
+    f.cuerpo.innerHTML=`<h2 class="pregunta">${esc(v.saleNoteNumber||v.folio)}</h2>
+      <p class="ayuda">Venta de ${esc(v.customerNameSnapshot)} · ${pesos(v.totalCents)}. Marca una o varias notas de compra que surtieron esta venta.</p>
+      <div class="campo"><label>Número de nota de venta</label><input class="txt" id="ln-venta" value="${esc(v.saleNoteNumber||v.folio)}" placeholder="Nota de venta 001"></div>
+      ${compras.length?compras.map(g=>{const on=(v.purchaseExpenseIds||[]).includes(g.id);const usadas=ventasLigadasACompra(g.id);return `<label class="fila borde" style="display:block;margin-bottom:9px"><div class="f-top"><input type="checkbox" data-compra="${g.id}" ${on?"checked":""}><span class="f-nom" style="margin-left:9px">${esc(g.purchaseNoteNumber||g.folio)}</span><span class="f-tot">${pesos(g.amountCents)}</span></div><div class="f-det">${fechaCorta(g.date)} · ${esc(g.supplier||g.concept)}${usadas.length?` · ligada con ${usadas.map(x=>esc(x.customerNameSnapshot)).join(", ")}`:""}</div></label>`;}).join("")
+        :vacio("No hay compras","Registra una compra de mercancía en Gastos para poder ligarla.")}`;
+    f.pie.innerHTML=`<button class="btn" id="ln-ok">Guardar relación</button>`;
+    $("ln-ok").onclick=async()=>{
+      v.saleNoteNumber=$("ln-venta").value.trim()||v.folio;
+      v.purchaseExpenseIds=Array.from(f.cuerpo.querySelectorAll("[data-compra]:checked")).map(x=>x.dataset.compra);
+      tocar(v); await guardar(); cerrarHoja(); pintarDetalleVenta(hojaActual(),v.id); aviso("Notas ligadas","ok");
+    };
+  }});
+}
+
+function abrirVentasDeCompra(gid){
+  const g=D.expenses.find(x=>x.id===gid); if(!g)return;
+  abrirHoja({titulo:"Cruce de notas", pie:true, render:f=>{
+    const ventas=ventasActivas().slice().sort((a,b)=>b.soldAt.localeCompare(a.soldAt));
+    f.cuerpo.innerHTML=`<h2 class="pregunta">${esc(g.purchaseNoteNumber||g.folio)}</h2><p class="ayuda">Marca las ventas y clientes a los que corresponde esta compra.</p>
+      <div class="campo"><label>Número de nota de compra</label><input class="txt" id="lc-num" value="${esc(g.purchaseNoteNumber||g.folio)}"></div>
+      ${ventas.length?ventas.map(v=>`<label class="fila borde" style="display:block;margin-bottom:9px"><div class="f-top"><input type="checkbox" data-venta="${v.id}" ${(v.purchaseExpenseIds||[]).includes(gid)?"checked":""}><span class="f-nom" style="margin-left:9px">${esc(v.customerNameSnapshot)}</span><span class="f-tot">${pesos(v.totalCents)}</span></div><div class="f-det">${esc(v.saleNoteNumber||v.folio)} · ${fechaCorta(v.soldAt)} · ${esc(textoItems(v))}</div></label>`).join(""):vacio("Sin ventas","Cuando registres ventas aparecerán aquí.")}`;
+    f.pie.innerHTML=`<button class="btn" id="lc-ok">Guardar relación</button>`;
+    $("lc-ok").onclick=async()=>{g.purchaseNoteNumber=$("lc-num").value.trim()||g.folio;tocar(g);
+      const elegidas=new Set(Array.from(f.cuerpo.querySelectorAll("[data-venta]:checked")).map(x=>x.dataset.venta));
+      ventas.forEach(v=>{const ids=new Set(v.purchaseExpenseIds||[]);if(elegidas.has(v.id))ids.add(gid);else ids.delete(gid);v.purchaseExpenseIds=Array.from(ids);tocar(v);});
+      await guardar();cerrarHoja();aviso("Notas y clientes ligados","ok");refrescar();};
   }});
 }
 
@@ -2946,16 +2992,16 @@ function pintarGastos(){
       ${Object.entries(porCat).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="lin"><span>${esc(k)}</span><b>${pesos(v)}</b></div>`).join("")}</div>`:""}
     <div class="aviso" style="margin-bottom:14px">Las compras de mercancía sí se registran como salida, pero no se vuelven a restar de la utilidad: el costo correspondiente se reconoce cuando vendes el producto.</div>
     <button class="btn" id="nuevo-gasto" style="margin-bottom:14px">+ Registrar gasto</button>
-    ${l.length? l.map(g=>`<button class="fila ${g.status==="cancelled"?"can":""}" data-g="${g.id}">
+    ${l.length? l.map(g=>{const ligadas=ventasLigadasACompra(g.id);return `<button class="fila ${g.status==="cancelled"?"can":""}" data-g="${g.id}">
       <div class="f-top"><span class="f-nom">${esc(g.concept)}</span></div>
-      <div class="f-det">${esc(nom(g.categoryId))}${g.supplier?" · "+esc(g.supplier):""}</div>
+      <div class="f-det">${esc(nom(g.categoryId))}${g.supplier?" · "+esc(g.supplier):""}${esCompraMercancia(g)?` · ${esc(g.purchaseNoteNumber||g.folio)}${ligadas.length?` · ${ligadas.length} venta${ligadas.length===1?"":"s"} ligada${ligadas.length===1?"":"s"}`:" · sin ligar"}`:""}</div>
       <div class="f-pie"><span class="etq">${g.folio}</span>
         <span style="font-size:13px;color:var(--tinta-40)">${fechaCorta(g.date)}</span>
         <span class="etq">${METODOS[g.paymentMethod]||"Otro"}</span>
         <span class="etq ${g.paymentStatus==="pending"?"rojo":"verde"}">${g.paymentStatus==="pending"?"Pendiente":"Pagado"}</span>
         ${g.receiptDataUrl?`<span class="etq">📎</span>`:""}
         ${g.status==="cancelled"?`<span class="etq gris">Cancelado</span>`:""}
-        <span class="f-tot">${pesos(g.amountCents)}</span></div></button>`).join("")
+        <span class="f-tot">${pesos(g.amountCents)}</span></div></button>`;}).join("")
       : vacio("Sin gastos en el periodo","Registra gasolina, luz, empaques o nómina para ver la utilidad real.")}`;
   $("gas-inicio").onclick=()=>irA("inicio");
   $("v-gastos").querySelectorAll("[data-pg]").forEach(b=>b.onclick=()=>{ perGastos=b.dataset.pg; pintarGastos(); });
@@ -2991,6 +3037,8 @@ function abrirGasto(id, prefill){
         <button data-gpago="paid" aria-pressed="${g.paymentStatus!=="pending"}">Pagado</button>
         <button data-gpago="pending" aria-pressed="${g.paymentStatus==="pending"}">Pendiente de pagar</button></div></div>
       <div class="campo"><label>Proveedor</label><input class="txt" id="g-p" value="${esc(g.supplier)}"></div>
+      <div class="campo"><label>Número de nota de compra</label><input class="txt" id="g-folio-compra" value="${esc(g.purchaseNoteNumber||"")}" placeholder="Ej. Compra 001"><p class="pista">Úsalo para cruzar esta compra con las ventas y clientes correspondientes.</p></div>
+      ${orig&&esCompraMercancia(orig)?`<button class="btn claro chico" id="g-ver-ligas" style="margin-bottom:14px">Ver ventas y clientes ligados</button>`:""}
       <div class="campo"><label>Nota</label><textarea class="txt" id="g-n" rows="2">${esc(g.note)}</textarea></div>
       <div class="campo"><label>Comprobante</label>
         <input type="file" id="g-file" accept="image/*" class="txt">
@@ -3012,6 +3060,7 @@ function abrirGasto(id, prefill){
       r.readAsDataURL(file);
     };
     const gc=$("g-cancel");
+    const gl=$("g-ver-ligas"); if(gl) gl.onclick=()=>abrirVentasDeCompra(orig.id);
     if(gc) gc.onclick = ()=>pedirMotivo("Cancelar gasto", async m=>{
       orig.status="cancelled"; orig.note=(orig.note?orig.note+" · ":"")+"Cancelado: "+m; orig.updatedAt=ahora();
       await guardar(); cerrarHoja(); aviso("Gasto cancelado"); refrescar();
@@ -3021,11 +3070,12 @@ function abrirGasto(id, prefill){
       g.concept=$("g-c").value.trim(); g.amountCents=aCent($("g-m").value);
       g.date=$("g-f").value||HOY(); g.categoryId=$("g-cat").value;
       g.supplier=$("g-p").value.trim(); g.note=$("g-n").value.trim();
+      g.purchaseNoteNumber=$("g-folio-compra").value.trim();
       if(!g.concept){ aviso("Escribe el concepto","err"); return; }
       if(g.amountCents<=0){ aviso("El monto debe ser mayor a cero","err"); return; }
       g.updatedBy=ajustesSync().correo||"local"; g.updatedAt = ahora();
       if(orig) Object.assign(orig, g);
-      else { g.folio = folio("expense","GAS"); D.expenses.push(g); }
+      else { g.folio = folio("expense","GAS"); if(!g.purchaseNoteNumber&&esCompraMercancia(g))g.purchaseNoteNumber="Compra "+g.folio.replace("GAS-",""); D.expenses.push(g); }
       const boton=$("g-ok"); boton.disabled=true; boton.textContent="Guardando…";
       await guardar();
       let confirmado=false;
@@ -3044,6 +3094,46 @@ function abrirGasto(id, prefill){
    VISTA MÁS
    ══════════════════════════════════════════════════════════ */
 /* ══ recordatorio de respaldo ══ */
+/* Caja: el saldo parte de un conteo físico, no de una suposición contable. */
+function abrirCaja(){
+  const cortes=(D.cashCounts||[]).filter(x=>x.status!=="cancelled").sort((a,b)=>(b.countedAt||b.createdAt).localeCompare(a.countedAt||a.createdAt));
+  const ultimo=cortes[0]||null, efectivo=ultimo?ultimo.amountCents:0;
+  const pendientes=D.expenses.filter(g=>g.status==="active"&&g.paymentStatus==="pending").sort((a,b)=>a.date.localeCompare(b.date));
+  const deuda=pendientes.reduce((s,g)=>s+g.amountCents,0), porCobrar=cuentasPorCobrar().reduce((s,x)=>s+x.saldo,0);
+  let acumulado=0, alcanzan=0; const cubiertas=new Set();
+  pendientes.forEach(g=>{if(acumulado+g.amountCents<=efectivo){acumulado+=g.amountCents;alcanzan++;cubiertas.add(g.id);}});
+  const mes=rangoPeriodo("mes");
+  const ventasMes=ventasActivas().filter(v=>enRango(v.soldAt,mes.desde,mes.hasta)).reduce((s,v)=>s+v.totalCents,0);
+  const cobrosEfectivo=D.payments.filter(p=>p.status==="active"&&p.method==="cash"&&enRango(p.paidAt,mes.desde,mes.hasta)).reduce((s,p)=>s+p.amountCents,0);
+  const gastosMes=D.expenses.filter(g=>g.status==="active"&&g.paymentStatus!=="pending"&&enRango(g.date,mes.desde,mes.hasta)).reduce((s,g)=>s+g.amountCents,0);
+  abrirHoja({titulo:"Caja", pie:false, render:f=>{
+    f.cuerpo.innerHTML=`<h2 class="pregunta">Dinero disponible</h2><p class="ayuda">El saldo parte del último conteo físico que ustedes capturen.</p>
+      <div class="bloque oscuro"><p class="bloque-t">Efectivo en caja</p><div class="cifra nt">${ultimo?pesos(efectivo):"Sin corte"}</div>
+        ${ultimo?`<p class="pista" style="color:#ffffffb8">Contado ${fechaLarga(soloFecha(ultimo.countedAt))} por ${esc(ultimo.countedBy||"usuario")}</p>`:""}
+        <div class="lin"><span>Notas pendientes por pagar</span><b>${pesos(deuda)}</b></div><div class="lin total"><span>Quedaría después de pagarlas</span><b>${pesos(efectivo-deuda)}</b></div></div>
+      <div class="bloque"><p class="bloque-t">Capacidad de pago hoy</p><div class="lin"><span>Notas completas que alcanza a pagar</span><b>${alcanzan} de ${pendientes.length}</b></div>
+        <div class="lin"><span>Monto que puede cubrir</span><b>${pesos(acumulado)}</b></div><div class="lin"><span>Por cobrar (aún no disponible)</span><b>${pesos(porCobrar)}</b></div>
+        ${efectivo<deuda?`<div class="aviso rojo" style="margin-top:10px">Faltan ${pesos(deuda-efectivo)} para cubrir todos los pagos pendientes.</div>`:`<div class="aviso" style="margin-top:10px">La caja alcanza para cubrir todos los pendientes y quedarían ${pesos(efectivo-deuda)}.</div>`}</div>
+      <button class="btn" id="caja-corte">Registrar dinero en caja</button>
+      <div class="bloque"><p class="bloque-t">Movimiento del mes</p><div class="lin"><span>Ventas registradas</span><b>${pesos(ventasMes)}</b></div><div class="lin"><span>Cobros en efectivo</span><b>${pesos(cobrosEfectivo)}</b></div><div class="lin"><span>Gastos pagados</span><b>${pesos(gastosMes)}</b></div><p class="pista">Ventas no es igual a caja: una venta pendiente todavía no entra, y transferencias o tarjeta no son efectivo físico.</p></div>
+      ${pendientes.length?`<div class="bloque"><p class="bloque-t">Notas pendientes · toca para pagar</p>${pendientes.map(g=>`<button class="lin" data-caja-g="${g.id}" style="width:100%;border:0;background:none;text-align:left"><span>${cubiertas.has(g.id)?"✓":"○"} ${esc(g.purchaseNoteNumber||g.folio)} · ${esc(g.supplier||g.concept)}</span><b>${pesos(g.amountCents)}</b></button>`).join("")}</div>`:""}
+      ${cortes.length?`<div class="bloque"><p class="bloque-t">Últimos cortes</p>${cortes.slice(0,5).map(x=>`<div class="lin"><span>${fechaCorta(soloFecha(x.countedAt))} · ${esc(x.countedBy||"")}</span><b>${pesos(x.amountCents)}</b></div>`).join("")}</div>`:""}`;
+    $("caja-corte").onclick=abrirCorteCaja;
+    f.cuerpo.querySelectorAll("[data-caja-g]").forEach(b=>b.onclick=()=>abrirGasto(b.dataset.cajaG));
+  }});
+}
+function abrirCorteCaja(){
+  abrirHoja({titulo:"Registrar caja", pie:true, render:f=>{
+    f.cuerpo.innerHTML=`<h2 class="pregunta">¿Cuánto efectivo hay?</h2><p class="ayuda">Cuenta físicamente billetes y monedas. Este monto será el nuevo punto de control.</p>
+      <div class="campo"><label>Efectivo contado</label><div class="con-uni"><input class="num" id="cc-monto" type="number" inputmode="decimal" min="0" step="1"><span class="uni">MXN</span></div></div>
+      <div class="campo"><label>Fecha</label><input class="txt" id="cc-fecha" type="date" value="${HOY()}"></div><div class="campo"><label>Nota</label><textarea class="txt" id="cc-nota" rows="2" placeholder="Ej. corte al terminar ruta"></textarea></div>`;
+    f.pie.innerHTML=`<button class="btn" id="cc-ok">Guardar corte de caja</button>`;
+    $("cc-ok").onclick=async()=>{const entrada=$("cc-monto").value;if(entrada===""){aviso("Captura el efectivo contado","err");return;}const monto=aCent(entrada);
+      const correo=ajustesSync().correo||"local";D.cashCounts.push({id:uid("caja"),amountCents:monto,countedAt:($("cc-fecha").value||HOY())+"T12:00:00",countedBy:correo,note:$("cc-nota").value.trim(),status:"active",createdAt:ahora(),updatedAt:ahora()});
+      await guardar();cerrarHoja();cerrarHoja();abrirCaja();aviso("Corte de caja guardado","ok");};
+  }});
+}
+
 const DIAS_RESPALDO = 7;
 function diasSinRespaldo(){
   const u = D.settings.ultimoRespaldo;
@@ -3417,7 +3507,7 @@ function migrarEsquema(d){
   d.settings = Object.assign(base.settings, d.settings||{});
   d.settings.folios = Object.assign({order:0,sale:0,expense:0}, d.settings.folios||{});
   d.settings.emisor = Object.assign({legalName:"",rfc:"",fiscalRegime:"",fiscalZipCode:""}, d.settings.emisor||{});
-  ["products","customers","orders","sales","payments","expenses","expenseCategories","stockMoves"]
+  ["products","customers","orders","sales","payments","expenses","cashCounts","expenseCategories","stockMoves"]
     .forEach(k=>{ if(!Array.isArray(d[k])) d[k]=[]; });
   if(!d.expenseCategories.length) d.expenseCategories = categoriasIniciales();
   d.products.forEach(p=>{
@@ -3429,6 +3519,8 @@ function migrarEsquema(d){
   });
   d.sales.forEach(v=>{
     if(!v.status) v.status="active";
+    if(!Array.isArray(v.purchaseExpenseIds)) v.purchaseExpenseIds=[];
+    if(!v.saleNoteNumber) v.saleNoteNumber=v.folio;
     if(!v.invoiceStatus) v.invoiceStatus = v.invoiceRequested?"pending":"not_requested";
     v.items.forEach(i=>{ if(i.stockUnits===undefined) i.stockUnits = i.quantity; });
   });
@@ -3438,11 +3530,13 @@ function migrarEsquema(d){
   });
   d.sales.forEach(v=>{ if(v.stockAplicado===undefined) v.stockAplicado = (v.status==="active"); });
   d.payments.forEach(p=>{ if(!p.status) p.status="active"; });
-  ["products","customers","orders","sales","payments","expenses"].forEach(t=>
+  ["products","customers","orders","sales","payments","expenses","cashCounts"].forEach(t=>
     (d[t]||[]).forEach(r=>{ if(!r.updatedAt) r.updatedAt = r.createdAt || ahora(); }));
   if(!d.sync) d.sync = {url:"", token:"", activo:false, ultimoPush:null, ultimoPull:null,
                         dispositivo:uid("disp"), ultimoError:"", ultimaVez:null, correo:""};
-  d.expenses.forEach(g=>{ if(!g.status) g.status="active"; if(!g.paymentStatus) g.paymentStatus="paid"; });
+  d.expenses.forEach(g=>{ if(!g.status) g.status="active"; if(!g.paymentStatus) g.paymentStatus="paid";
+    const cat=d.expenseCategories.find(x=>x.id===g.categoryId), compra=(Array.isArray(g.items)&&g.items.length)||!!(cat&&normaliza(cat.name)==="materia prima");
+    if(compra&&!g.purchaseNoteNumber)g.purchaseNoteNumber="Compra "+String(g.folio||g.id); });
   d.schemaVersion = SCHEMA;
   return d;
 }
@@ -3530,7 +3624,7 @@ async function arrancar(){
    por RLS) y una sesión de usuario. Realtime empuja cada cambio
    a los dos al instante. La service_role key NUNCA vive aquí.
    ══════════════════════════════════════════════════════════ */
-const TABLAS = ["products","customers","orders","sales","payments","expenses"];
+const TABLAS = ["products","customers","orders","sales","payments","expenses","cashCounts"];
 
 function ajustesSync(){
   if(!D.sync) D.sync = {url:"", token:"", activo:false, ultimoPush:null, ultimoPull:null,
