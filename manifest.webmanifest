@@ -1,6 +1,6 @@
 {
-  "name": "Sierra Noble Service",
-  "short_name": "SN Service",
+  "name": "Sierra Noble Services",
+  "short_name": "SN Services",
   "description": "Pedidos, compras, ventas y operación compartida de Sierra Noble.",
   "start_url": "./index.html",
   "scope": "./",

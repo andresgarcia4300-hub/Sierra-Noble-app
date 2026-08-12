@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sierra Noble Service</title>
+<title>Sierra Noble Services</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,13 +33,13 @@ h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-
   border-bottom:3px solid var(--oro);position:sticky;top:0;z-index:50}
 .tb-fila{display:flex;align-items:center;gap:12px;position:relative;z-index:1}
 .logo{width:46px;height:46px;flex:none;border-radius:13px;display:block;object-fit:cover;background:#000}
-.marca-t{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:25px;line-height:1}
+.marca-t{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:22px;line-height:1;white-space:nowrap}
 .marca-s{font-size:12px;letter-spacing:.24em;text-transform:uppercase;color:var(--oro);font-weight:700;margin-top:2px}
-.estado-g{margin-left:auto;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--tinta-40);font-weight:600;flex:none}
+.estado-g{margin-left:auto;display:none;align-items:center;gap:7px;font-size:13px;color:var(--tinta-40);font-weight:600;flex:none}
 .punto{width:9px;height:9px;border-radius:50%;background:var(--verde);flex:none}
 .punto.trabajando{background:var(--oro)}
 .punto.mal{background:var(--rojo)}
-.atajos{display:flex;gap:9px;margin-top:14px}
+.atajos{display:none;gap:9px;margin-top:14px}
 .atajos button{flex:1;min-height:46px;border-radius:12px;border:1px solid var(--linea-f);background:var(--crema);
   color:var(--tinta);font-size:15px;font-weight:700}
 .atajos button:active{background:var(--linea)}
@@ -158,6 +158,16 @@ h1,h2,h3{font-family:"Bricolage Grotesque",system-ui,sans-serif;letter-spacing:-
 .par.wrap{flex-wrap:wrap}
 .par.wrap button{flex:1 1 44%}
 .rejilla2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+
+/* ══ inicio tipo mosaico ══ */
+.menu-hero{padding:8px 2px 18px}.menu-hero h1{font-size:31px}.menu-hero p{margin:5px 0 0;color:var(--tinta-70)}
+.menu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.menu-tile{min-height:142px;border-radius:22px;padding:18px;text-align:left;color:#fff;display:flex;flex-direction:column;justify-content:space-between;box-shadow:0 10px 24px rgba(20,22,26,.12);overflow:hidden;position:relative}
+.menu-tile::after{content:"";position:absolute;width:86px;height:86px;border-radius:50%;right:-25px;top:-25px;background:rgba(255,255,255,.13)}
+.menu-tile svg{width:30px;height:30px;position:relative;z-index:1}.menu-tile b{font-family:"Bricolage Grotesque",sans-serif;font-size:20px;position:relative;z-index:1}.menu-tile small{display:block;font-size:12px;opacity:.86;margin-top:3px;font-weight:600}
+.tile-wide{grid-column:1/-1;min-height:116px}.tile-oro{background:#B8862B}.tile-azul{background:#356A8A}.tile-verde{background:#477A4A}.tile-rojo{background:#A84C3D}.tile-violeta{background:#725C91}.tile-tinta{background:#2A2E35}.tile-coral{background:#C56F55}.tile-cielo{background:#4D8FA7}
+.volver-inicio{display:inline-flex;align-items:center;gap:6px;color:var(--tinta-70);font-weight:700;margin-bottom:14px;padding:8px 0}
+@media(min-width:640px){.menu-grid{grid-template-columns:repeat(4,1fr)}.tile-wide{grid-column:span 2}}
 
 /* ══ formularios ══ */
 .campo{margin-bottom:15px}
@@ -306,14 +316,13 @@ details summary{padding:13px 0;font-weight:700;cursor:pointer}
 <meta name="theme-color" content="#B8862B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Sierra Noble Service">
+<meta name="apple-mobile-web-app-title" content="Sierra Noble Services">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <div class="topbar">
   <div class="tb-fila">
-    <svg class="logo" viewBox="0 0 100 100" role="img" aria-label="Sierra Noble" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" rx="26" fill="#0c0b0a"/><path d="M8 74 L28 44 L38 57 L52 32 L64 51 L74 43 L92 74 Z" fill="#C79A3B"/><path d="M52 32 L58 41 L52 45 L46 41 Z" fill="#F4E9CE"/><path d="M28 44 L33 51 L28 54 L24 51 Z" fill="#F4E9CE"/></svg>
-    <div>
-      <div class="marca-t">Sierra <span style="color:var(--oro)">Noble</span></div>
-      <div class="marca-s" id="negocio">Service</div>
+    <div id="marca-inicio" role="button" tabindex="0" aria-label="Ir a Inicio" style="cursor:pointer">
+      <div class="marca-t">Sierra <span style="color:var(--oro)">Noble</span> Services</div>
+      <div class="marca-s" id="negocio" style="display:none"></div>
     </div>
     <div class="estado-g">
       <span class="punto" id="punto"></span><span id="estado-txt">Guardado</span>
@@ -328,6 +337,7 @@ details summary{padding:13px 0;font-weight:700;cursor:pointer}
 
 <main>
   <section class="vista on" id="v-inicio"></section>
+  <section class="vista" id="v-pedidos"></section>
   <section class="vista" id="v-resumen"></section>
   <section class="vista" id="v-gastos"></section>
   <section class="vista" id="v-mas"></section>
@@ -1026,7 +1036,14 @@ function precioDe(prod, tier, tamano){
     const p = prod.porciones.find(x=>x.gramos===tamano) || prod.porciones[0];
     return tier==="wholesale" && p.wholesalePriceCents!=null ? p.wholesalePriceCents : p.retailPriceCents;
   }
-  return tier==="wholesale" && prod.wholesalePriceCents!=null ? prod.wholesalePriceCents : prod.retailPriceCents;
+  /* Nunca usar el costo de compra como precio automático de venta. Si una
+     tarifa mayoreo quedó igual o debajo del costo, se usa menudeo hasta que
+     Andrés o Luis capture un precio especial en el pedido. */
+  if(tier==="wholesale" && prod.wholesalePriceCents!=null && prod.wholesalePriceCents>prod.unitCostCents) return prod.wholesalePriceCents;
+  return prod.retailPriceCents;
+}
+function precioVentaDe(prod,tier,cap,tamano){
+  return cap&&cap.customUnitPriceCents!=null ? Math.max(0,Math.round(cap.customUnitPriceCents)) : precioDe(prod,tier,tamano);
 }
 
 /* cap = {modo:'piezas'|'peso'|'porcion'|'unidad', gramos, piezas, tamano, cantidad} */
@@ -1036,21 +1053,21 @@ function renglonDeProducto(prod, tier, cap){
     const tam = cap.tamano || prod.porciones[0].gramos;
     const gramos = n*tam;
     return armarRenglon({product:prod, nameSnapshot:prod.name, quantity:n, unit:"porción",
-      unitPriceCents:precioDe(prod,tier,tam), unitCostCents:Math.round((prod.unitCostCents||0)*tam/1000),
+      unitPriceCents:precioVentaDe(prod,tier,cap,tam), unitCostCents:Math.round((prod.unitCostCents||0)*tam/1000),
       taxRate:prod.taxRate||0, gramos, piezas:n, tamano:tam,
       stockUnits: gramos/1000, costoDesconocido:!!prod.costoDesconocido});
   }
   if(esPorPeso(prod)){
     const gramos = cap.modo==="piezas" ? Math.max(1,Math.round(cap.piezas||1))*(cap.tamano||500) : Math.max(0,cap.gramos||0);
     return armarRenglon({product:prod, nameSnapshot:prod.name, quantity:gramos/1000, unit:"kg",
-      unitPriceCents:precioDe(prod,tier), unitCostCents:prod.unitCostCents||0, taxRate:prod.taxRate||0,
+      unitPriceCents:precioVentaDe(prod,tier,cap), unitCostCents:prod.unitCostCents||0, taxRate:prod.taxRate||0,
       gramos, piezas: cap.modo==="piezas"?Math.max(1,Math.round(cap.piezas||1)):null,
       tamano: cap.modo==="piezas"?(cap.tamano||500):null,
       stockUnits: gramos/1000, costoDesconocido:!!prod.costoDesconocido});
   }
   const c = Math.max(0, Number(cap.cantidad)||0);
   return armarRenglon({product:prod, nameSnapshot:prod.name, quantity:c, unit:UNIDADES[prod.saleUnit]||"pieza",
-    unitPriceCents:precioDe(prod,tier), unitCostCents:prod.unitCostCents||0, taxRate:prod.taxRate||0,
+    unitPriceCents:precioVentaDe(prod,tier,cap), unitCostCents:prod.unitCostCents||0, taxRate:prod.taxRate||0,
     stockUnits:c, costoDesconocido:!!prod.costoDesconocido});
 }
 
@@ -1168,6 +1185,11 @@ function rangoPeriodo(clave, custom){
   return {desde, hasta, etiqueta, dias, previo:{desde:iso(pd), hasta:iso(ph)}};
 }
 const enRango = (f,d,h) => !!f && f>=d && f<=h;
+function esCompraMercancia(g){
+  if(g&&Array.isArray(g.items)&&g.items.length) return true;
+  const c=D.expenseCategories.find(x=>x.id===g.categoryId);
+  return !!(c&&normaliza(c.name)==="materia prima");
+}
 
 function metricas(desde, hasta){
   const ventas = ventasActivas().filter(v=>enRango(v.soldAt,desde,hasta));
@@ -1176,17 +1198,20 @@ function metricas(desde, hasta){
   const tv = ventas.reduce((s,v)=>s+v.totalCents,0);
   const tc = ventas.reduce((s,v)=>s+v.costTotalCents,0);
   const bruta = tv-tc;
-  const tg = gastos.reduce((s,g)=>s+g.amountCents,0);
+  const compras = gastos.filter(esCompraMercancia);
+  const operativos = gastos.filter(g=>!esCompraMercancia(g));
+  const tCompras=compras.reduce((s,g)=>s+g.amountCents,0);
+  const tg = operativos.reduce((s,g)=>s+g.amountCents,0);
   return {
     ventas:tv, nVentas:ventas.length,
     cobrado: pagos.reduce((s,p)=>s+p.amountCents,0),
     porCobrar: cuentasPorCobrar().reduce((s,x)=>s+x.saldo,0),
     porCobrarPeriodo: ventas.reduce((s,v)=>s+saldoDe(v),0),
-    costo:tc, bruta, gastos:tg, neta:bruta-tg,
+    costo:tc, bruta, gastos:tg, compras:tCompras, salidas:tg+tCompras, neta:bruta-tg,
     margen: pctNum(bruta,tv),
     ticket: ventas.length ? Math.round(tv/ventas.length) : 0,
     sinCosto: ventas.some(v=>v.items.some(i=>i.costoDesconocido)),
-    listaVentas:ventas, listaPagos:pagos, listaGastos:gastos
+    listaVentas:ventas, listaPagos:pagos, listaGastos:gastos, listaCompras:compras, listaGastosOperativos:operativos
   };
 }
 const pedidosPendientes = () => D.orders.filter(p=>p.status==="pending"||p.status==="ready");
@@ -1306,18 +1331,11 @@ const IC = {
   gastos:'<path d="M5 7v12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 14.5 12 11l2.5 2.5L19 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M15.5 8H19v3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
   mas:'<circle cx="5" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="19" cy="12" r="1.9" fill="currentColor"/>'
 };
-const VISTAS = [{k:"inicio",t:"Pedidos"},{k:"resumen",t:"Números"},{k:"escanear",t:"Escanear",fab:true},
-                {k:"gastos",t:"Gastos"},{k:"mas",t:"Más"}];
+const VISTAS = [{k:"inicio",t:"Inicio"}];
 let vistaActual="inicio";
 function pintarNav(){
-  $("nav").innerHTML = VISTAS.map(v=> v.fab
-    ? `<button data-v="escanear" class="fab"><span class="cir"><svg viewBox="0 0 24 24">${IC.escanear}</svg></span><span>${v.t}</span></button>`
-    : `<button data-v="${v.k}" aria-current="${vistaActual===v.k}"><svg viewBox="0 0 24 24">${IC[v.k]}</svg><span>${v.t}</span></button>`
-  ).join("");
-  $("nav").querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>{
-    if(b.dataset.v==="escanear") return iniciarScan();
-    irA(b.dataset.v);
-  });
+  $("nav").innerHTML=""; $("nav").style.display="none";
+  document.body.style.paddingBottom="24px";
 }
 function irA(v){
   vistaActual=v;
@@ -1326,6 +1344,7 @@ function irA(v){
 }
 function refrescar(){
   if(vistaActual==="inicio") pintarInicio();
+  else if(vistaActual==="pedidos") pintarPedidos();
   else if(vistaActual==="resumen") pintarResumen();
   else if(vistaActual==="gastos") pintarGastos();
   else if(vistaActual==="mas") pintarMas();
@@ -1357,6 +1376,7 @@ function pintarResumen(){
       ${pie||""}${ir?`<div class="ir">${ir} →</div>`:""}</button>`;
 
   $("v-resumen").innerHTML = `
+    <button class="volver-inicio" id="num-inicio">← Inicio</button>
     <h1 class="titulo-v">Números</h1>
     <p class="sub-v">Cómo va el negocio.</p>
     <div class="periodo">
@@ -1369,13 +1389,15 @@ function pintarResumen(){
       ${tarj("ventas","","Vendiste", pesos(m.ventas), cambio(m.ventas, mp.ventas), "Abrir")}
       ${tarj("cobros","","Te pagaron", pesos(m.cobrado), `<div class="p">${m.nVentas} venta${m.nVentas===1?"":"s"}</div>`, "Abrir")}
       ${tarj("cxc", m.porCobrar>0?"rojo":"", "Te deben", pesos(m.porCobrar), `<div class="p">Saldo total</div>`, "Cobrar")}
-      ${tarj("gastos","","Gastaste", pesos(m.gastos), cambio(m.gastos, mp.gastos), "Abrir")}
+      ${tarj("gastos","","Gastos operativos", pesos(m.gastos), cambio(m.gastos, mp.gastos), "Abrir")}
+      ${tarj("gastos","","Compra de mercancía", pesos(m.compras), `<div class="p">Salida de dinero, no se resta dos veces</div>`, "Abrir")}
       ${tarj("ventas","","Venta promedio", m.nVentas?pesos(m.ticket):"—", `<div class="p">Por operación</div>`, "Abrir")}
     </div>
+    <div class="aviso" style="margin-bottom:12px"><b>Cómo se calcula «Te quedó».</b> Ventas − costo de los productos vendidos − gastos operativos. Las compras de mercancía aparecen como salida de dinero, pero no se restan otra vez porque su costo ya se reconoce al vender.</div>
     ${m.sinCosto?`<div class="aviso oro" style="margin-bottom:12px"><b>Ojo con este número.</b> Hay artículos sin costo capturado, así que «te quedó» está inflado. Captura los costos en Artículos y precios para que sea real.</div>`:""}
     <div class="bloque">
-      <div class="graf-cab"><h3>Ventas y gastos</h3>
-        <div class="leyenda"><span><i style="background:var(--tinta)"></i>Ventas</span><span><i style="background:var(--oro)"></i>Gastos</span></div></div>
+      <div class="graf-cab"><h3>Ventas y gastos operativos</h3>
+        <div class="leyenda"><span><i style="background:var(--tinta)"></i>Ventas</span><span><i style="background:var(--oro)"></i>Operativos</span></div></div>
       ${grafica(r)}</div>
     ${atencion.length?`<div class="bloque"><h3>Necesita atención</h3>
       ${atencion.map(a=>`<button class="fila" data-at="${a.id}" style="margin-bottom:8px">
@@ -1385,6 +1407,7 @@ function pintarResumen(){
           <span class="etq grande ${a.tono}">${a.accion}</span><span class="flecha">›</span></div></button>`).join("")}
       </div>`:""}`;
 
+  $("num-inicio").onclick=()=>irA("inicio");
   $("v-resumen").querySelectorAll("[data-p]").forEach(b=>b.onclick=()=>{ periodoSel=b.dataset.p; pintarResumen(); });
   $("v-resumen").querySelectorAll("[data-ir]").forEach(b=>b.onclick=()=>navegarTarjeta(b.dataset.ir, r));
   $("v-resumen").querySelectorAll("[data-at]").forEach(b=>b.onclick=()=>{
@@ -1424,7 +1447,7 @@ function grafica(r){
     const f=iso(d);
     cubos.push({f,
       v: ventasActivas().filter(x=>x.soldAt===f).reduce((s,x)=>s+x.totalCents,0),
-      g: D.expenses.filter(x=>x.status==="active"&&x.date===f).reduce((s,x)=>s+x.amountCents,0)});
+      g: D.expenses.filter(x=>x.status==="active"&&x.date===f&&!esCompraMercancia(x)).reduce((s,x)=>s+x.amountCents,0)});
   }
   const max = Math.max(1, ...cubos.map(c=>Math.max(c.v,c.g)));
   const W=340, H=150, base=H-22, paso=W/cubos.length;
@@ -1547,7 +1570,9 @@ function pintarSelector(cont, est, alCambiar){
     ${lista.length? lista.map((p,i)=>filaProd(p,est,i)).join("")
       : vacio("Sin resultados","Revisa el catálogo en Más › Productos.")}`;
 
-  cont.querySelectorAll("[data-tier]").forEach(b=>b.onclick=()=>{ est.tier=b.dataset.tier; pintarSelector(cont,est,alCambiar); alCambiar(); });
+  cont.querySelectorAll("[data-tier]").forEach(b=>b.onclick=()=>{ est.tier=b.dataset.tier;
+    Object.values(est.cesta).forEach(c=>{if(c)delete c.customUnitPriceCents;});
+    pintarSelector(cont,est,alCambiar); alCambiar(); });
   cont.querySelectorAll("[data-cat]").forEach(b=>b.onclick=()=>{ est.categoria=b.dataset.cat; pintarSelector(cont,est,alCambiar); });
   const bq = cont.querySelector("#sel-q");
   bq.oninput = e=>{ const v=e.target.value; est.busqueda=v; pintarSelector(cont,est,alCambiar);
@@ -1557,7 +1582,7 @@ function pintarSelector(cont, est, alCambiar){
 
 function filaProd(p, est, ix){
   const cap = est.cesta[p.id], on = !!cap, c = cap||capInicial(p);
-  const precio = precioDe(p, est.tier, c.tamano);
+  const precio = precioVentaDe(p, est.tier, c, c.tamano);
   const r = on ? renglonDeProducto(p, est.tier, c) : null;
   const stockTxt = p.stock!=null ? `<small>${numBonito(p.stock)} ${UNI_CORTA[p.saleUnit]}</small>` : "";
 
@@ -1595,6 +1620,9 @@ function filaProd(p, est, ix){
       <span class="pz">${pesos(precio)}${esPorPeso(p)&&!p.porciones?"/kg":""}${stockTxt}</span>
       <span class="mas">${on?"✓":"+"}</span></button>
     <div class="cuerpo-p">${ctrl}
+      <div class="campo" style="margin:0"><label>Precio de venta ${esPorPeso(p)&&!p.porciones?"por kg":""}</label>
+        <div class="con-uni"><input class="num" data-precio-venta type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(precio)}"><span class="uni">MXN</span></div>
+        <p class="pista">Editable para este cliente. Costo de compra: ${pesos(p.unitCostCents)}${esPorPeso(p)?"/kg":""}.</p></div>
       ${p.costoDesconocido?`<div class="aviso oro" style="font-size:13px;padding:9px 11px">Costo desconocido: la utilidad de este artículo no es confiable.</div>`:""}
       <div class="equiv"><em data-eq>${r?textoRenglon(r):""}</em><b data-imp>${r?pesos(r.subtotalCents):""}</b></div>
       <div data-alerta></div>
@@ -1643,7 +1671,11 @@ function engancharProd(cont, p, ix, est, alCambiar){
     else { const g=fila.querySelector("[data-gr]"); if(g) g.value = c.gramos||0; }
     refrescarFila();
   });
-  const pz=fila.querySelector("[data-pz]"), gr=fila.querySelector("[data-gr]"), ct=fila.querySelector("[data-cant]");
+  const pz=fila.querySelector("[data-pz]"), gr=fila.querySelector("[data-gr]"), ct=fila.querySelector("[data-cant]"), pv=fila.querySelector("[data-precio-venta]");
+  if(pv){
+    pv.oninput=()=>{const c=encender();c.customUnitPriceCents=Math.max(0,aCent(pv.value));refrescarFila();};
+    pv.onfocus=()=>{encender();refrescarFila();};
+  }
   if(pz){
     const set = v=>{ const c=encender(); c.piezas=Math.max(1,Math.round(v)); pz.value=c.piezas;
       c.gramos=c.piezas*(c.tamano||500); refrescarFila(); };
@@ -1754,10 +1786,12 @@ function abrirCapturaPedido(id, prefill){
     p.items.forEach(i=>{
       if(!i.productId) return;
       const prod = D.products.find(x=>x.id===i.productId); if(!prod) return;
-      bor.est.cesta[i.productId] = i.unit==="porción" ? {modo:"porcion", piezas:i.piezas||1, tamano:i.tamano}
+      const capGuardada = i.unit==="porción" ? {modo:"porcion", piezas:i.piezas||1, tamano:i.tamano}
         : i.unit==="kg" ? (i.piezas ? {modo:"piezas", piezas:i.piezas, tamano:i.tamano, gramos:i.gramos}
                                     : {modo:"peso", gramos:i.gramos})
         : {modo:"unidad", cantidad:i.quantity};
+      capGuardada.customUnitPriceCents=i.unitPriceCents;
+      bor.est.cesta[i.productId]=capGuardada;
     });
   } else if(prefill && prefill.matches && prefill.matches.length){
     prefill.matches.forEach(m=>{ bor.est.cesta[m.productId] = m.cap; });
@@ -1960,10 +1994,42 @@ function pantallaConfirmado({titulo, sub, op, whatsapp, venta}){
 }
 
 /* ══════════════════════════════════════════════════════════
-   INICIO · el pedido es lo primero
+   INICIO · menú principal por mosaicos
    ══════════════════════════════════════════════════════════ */
-let tabPed="pending";
 function pintarInicio(){
+  const r=rangoPeriodo("mes"), m=metricas(r.desde,r.hasta);
+  const pendientes=pedidosPendientes().length, cxc=cuentasPorCobrar().reduce((s,x)=>s+x.saldo,0);
+  const iconos={
+    pedidos:'<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    scan:IC.escanear,
+    gastos:'<path d="M4 7h16v11H4zM7 11h5M16 10v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    numeros:'<path d="M5 19V9M10 19V5M15 19v-7M20 19V3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+    clientes:'<circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 19c.5-4 2.3-6 5.5-6s5 2 5.5 6M16 8.5h5M18.5 6v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    articulos:'<path d="M4 7 12 3l8 4-8 4-8-4Zm0 5 8 4 8-4M4 16l8 4 8-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+    cobrar:'<path d="M4 6h16v12H4zM8 10h8M8 14h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+    cuenta:'<circle cx="12" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M5 20c.6-4.6 2.9-7 7-7s6.4 2.4 7 7" fill="none" stroke="currentColor" stroke-width="1.8"/>'};
+  const tile=(k,cl,t,sub,wide="")=>`<button class="menu-tile ${cl} ${wide}" data-menu="${k}"><svg viewBox="0 0 24 24">${iconos[k]}</svg><b>${t}<small>${sub}</small></b></button>`;
+  $("v-inicio").innerHTML=`<div class="menu-hero"><h1>${saludo()}</h1><p>Todo Sierra Noble en un solo lugar.</p></div>
+    <div class="menu-grid">
+      ${tile("pedidos","tile-oro","Pedidos",pendientes?`${pendientes} por entregar`:"Crear y consultar","tile-wide")}
+      ${tile("scan","tile-azul","Escanear","Compra o venta")}
+      ${tile("gastos","tile-coral","Gastos","Salidas y pendientes")}
+      ${tile("numeros","tile-verde","Números",`Resultado del mes ${pesos(m.neta)}`,"tile-wide")}
+      ${tile("clientes","tile-violeta","Clientes",`${D.customers.length} registrados`)}
+      ${tile("articulos","tile-cielo","Artículos",`${D.products.filter(p=>p.active).length} activos`)}
+      ${tile("cobrar","tile-rojo","Por cobrar",cxc?pesos(cxc):"Todo cobrado")}
+      ${tile("cuenta","tile-tinta","Cuenta",ajustesSync().correo||"Sin sesión")}
+    </div>`;
+  $("v-inicio").querySelectorAll("[data-menu]").forEach(b=>b.onclick=()=>{
+    const k=b.dataset.menu;
+    if(k==="pedidos")return irA("pedidos"); if(k==="scan")return iniciarScan(); if(k==="gastos")return irA("gastos"); if(k==="numeros")return irA("resumen");
+    if(k==="clientes")return abrirClientes(); if(k==="articulos")return abrirProductos(); if(k==="cobrar")return abrirCuentasPorCobrar(); if(k==="cuenta")return abrirNube();
+  });
+}
+
+/* ══ PEDIDOS ══ */
+let tabPed="pending";
+function pintarPedidos(){
   const grupos = {pending:"Por entregar", delivered:"Entregados", cancelled:"Cancelados"};
   const l = D.orders.filter(p=> tabPed==="pending" ? (p.status==="pending"||p.status==="ready") : p.status===tabPed)
                     .sort((a,b)=>(a.deliveryDate||"").localeCompare(b.deliveryDate||""));
@@ -1981,8 +2047,9 @@ function pintarInicio(){
     });
   } else html = l.slice().reverse().map(filaPedido).join("");
 
-  $("v-inicio").innerHTML = `
-    <h1 class="saludo">${saludo()}</h1>
+  $("v-pedidos").innerHTML = `
+    <button class="volver-inicio" id="ped-inicio">← Inicio</button>
+    <h1 class="saludo">Pedidos</h1>
     <p class="saludo-s">${hoy ? `Tienes ${hoy} pedido${hoy===1?"":"s"} para hoy` : "No hay pedidos pendientes para hoy"}</p>
     <button class="btn destacado" id="nuevo-ped">+ Nuevo pedido</button>
     ${avisoRespaldo()}
@@ -1993,12 +2060,13 @@ function pintarInicio(){
     <div class="periodo">${Object.entries(grupos).map(([k,t])=>
       `<button data-t="${k}" aria-pressed="${tabPed===k}">${t}</button>`).join("")}</div>
     ${html}`;
+  $("ped-inicio").onclick=()=>irA("inicio");
   $("nuevo-ped").onclick = ()=>abrirCapturaPedido(null);
   const dd = $("ir-deben"); if(dd) dd.onclick = abrirCuentasPorCobrar;
   const rp = $("ir-respaldo"); if(rp) rp.onclick = crearRespaldo;
-  $("v-inicio").querySelectorAll("[data-prep]").forEach(b=>b.onclick=()=>abrirPreparacion(Number(b.dataset.prep)));
-  $("v-inicio").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ tabPed=b.dataset.t; pintarInicio(); });
-  $("v-inicio").querySelectorAll("[data-ped]").forEach(b=>b.onclick=()=>abrirDetallePedido(b.dataset.ped));
+  $("v-pedidos").querySelectorAll("[data-prep]").forEach(b=>b.onclick=()=>abrirPreparacion(Number(b.dataset.prep)));
+  $("v-pedidos").querySelectorAll("[data-t]").forEach(b=>b.onclick=()=>{ tabPed=b.dataset.t; pintarPedidos(); });
+  $("v-pedidos").querySelectorAll("[data-ped]").forEach(b=>b.onclick=()=>abrirDetallePedido(b.dataset.ped));
 }
 function diasDePreparacion(){
   const dias = [["Hoy", HOY()], ["Mañana", MANANA()]].map(([t,f])=>({
@@ -2407,11 +2475,11 @@ function abrirProducto(id, alVolver){
             ${Object.entries(UNIDADES).map(([k,v])=>`<option value="${k}" ${p.saleUnit===k?"selected":""}>${v[0].toUpperCase()+v.slice(1)}</option>`).join("")}</select></div>
         </div>
         <div class="rejilla2">
-          <div class="campo"><label>${p.saleUnit==="kg"?"Costo por kilo":"Costo de compra"}</label><input class="num" id="p-c" type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(p.unitCostCents)}">
+          <div class="campo"><label>${p.saleUnit==="kg"?"Costo de compra por kilo":"Costo de compra"}</label><input class="num" id="p-c" type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(p.unitCostCents)}">
             ${p.name==="Requesón"?`<p class="pista">${pesos(Math.round(p.unitCostCents/4))} por cuarto de kilo.</p>`:""}</div>
-          <div class="campo"><label>Precio de venta</label><input class="num" id="p-pr" type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(p.retailPriceCents)}"></div>
+          <div class="campo"><label>Precio venta menudeo</label><input class="num" id="p-pr" type="number" inputmode="decimal" min="0" step="0.5" value="${deCent(p.retailPriceCents)}"></div>
         </div>
-        <div class="campo"><label>Precio mayoreo</label><input class="num" id="p-pm" type="number" inputmode="decimal" min="0" step="0.5" value="${p.wholesalePriceCents==null?0:deCent(p.wholesalePriceCents)}"></div>
+        <div class="campo"><label>Precio venta mayoreo</label><input class="num" id="p-pm" type="number" inputmode="decimal" min="0" step="0.5" value="${p.wholesalePriceCents==null?0:deCent(p.wholesalePriceCents)}"><p class="pista">El costo solo calcula utilidad; nunca se cobra automáticamente al cliente.</p></div>
         <div class="bloque oscuro">
           <div class="lin" style="margin:0;padding:0"><span style="color:#fff">Utilidad por unidad</span>
             <b style="font-family:'Bricolage Grotesque',sans-serif;font-size:20px">${p.costoDesconocido?"—":pesos(u)}</b></div>
@@ -2670,18 +2738,21 @@ function pintarGastos(){
   const r = rangoPeriodo(perGastos);
   const l = D.expenses.filter(g=>enRango(g.date,r.desde,r.hasta)).sort((a,b)=>b.date.localeCompare(a.date));
   const total = l.filter(g=>g.status==="active").reduce((s,g)=>s+g.amountCents,0);
+  const compras=l.filter(g=>g.status==="active"&&esCompraMercancia(g)).reduce((s,g)=>s+g.amountCents,0);
+  const operativos=total-compras;
+  const porPagar=l.filter(g=>g.status==="active"&&g.paymentStatus==="pending").reduce((s,g)=>s+g.amountCents,0);
   const nom = id => (D.expenseCategories.find(c=>c.id===id)||{}).name || "Sin categoría";
   const porCat = {};
   l.filter(g=>g.status==="active").forEach(g=>porCat[nom(g.categoryId)] = (porCat[nom(g.categoryId)]||0)+g.amountCents);
-  $("v-gastos").innerHTML = `<h1 class="titulo-v">Gastos</h1>
-    <p class="sub-v">Lo que sale del negocio y no es mercancía vendida.</p>
+  $("v-gastos").innerHTML = `<button class="volver-inicio" id="gas-inicio">← Inicio</button><h1 class="titulo-v">Gastos</h1>
+    <p class="sub-v">Todas las salidas, separadas para que los números cuadren.</p>
     <div class="periodo">${[["hoy","Hoy"],["semana","Semana"],["mes","Mes"]].map(([k,t])=>
       `<button data-pg="${k}" aria-pressed="${perGastos===k}">${t}</button>`).join("")}</div>
-    <div class="bloque oscuro"><p class="bloque-t">Total del periodo</p>
-      <div class="cifra nt">${pesos(total)}</div></div>
+    <div class="bloque oscuro"><p class="bloque-t">Salidas del periodo</p><div class="cifra nt">${pesos(total)}</div>
+      <div class="lin"><span>Compra de mercancía</span><b>${pesos(compras)}</b></div><div class="lin"><span>Gastos operativos</span><b>${pesos(operativos)}</b></div><div class="lin"><span>Pendiente por pagar</span><b>${pesos(porPagar)}</b></div></div>
     ${Object.keys(porCat).length?`<div class="bloque"><p class="bloque-t">Por categoría</p>
       ${Object.entries(porCat).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="lin"><span>${esc(k)}</span><b>${pesos(v)}</b></div>`).join("")}</div>`:""}
-    <div class="aviso" style="margin-bottom:14px">El costo de la mercancía vendida ya se descuenta como <b>costo de ventas</b>. No lo registres otra vez aquí o contarías doble.</div>
+    <div class="aviso" style="margin-bottom:14px">Las compras de mercancía sí se registran como salida, pero no se vuelven a restar de la utilidad: el costo correspondiente se reconoce cuando vendes el producto.</div>
     <button class="btn" id="nuevo-gasto" style="margin-bottom:14px">+ Registrar gasto</button>
     ${l.length? l.map(g=>`<button class="fila ${g.status==="cancelled"?"can":""}" data-g="${g.id}">
       <div class="f-top"><span class="f-nom">${esc(g.concept)}</span></div>
@@ -2694,6 +2765,7 @@ function pintarGastos(){
         ${g.status==="cancelled"?`<span class="etq gris">Cancelado</span>`:""}
         <span class="f-tot">${pesos(g.amountCents)}</span></div></button>`).join("")
       : vacio("Sin gastos en el periodo","Registra gasolina, luz, empaques o nómina para ver la utilidad real.")}`;
+  $("gas-inicio").onclick=()=>irA("inicio");
   $("v-gastos").querySelectorAll("[data-pg]").forEach(b=>b.onclick=()=>{ perGastos=b.dataset.pg; pintarGastos(); });
   $("nuevo-gasto").onclick = ()=>abrirGasto(null);
   $("v-gastos").querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>abrirGasto(b.dataset.g));
@@ -2843,7 +2915,7 @@ function pintarMas(){
       fiscalRegime:$("m-reg").value.trim(), fiscalZipCode:$("m-cp").value.trim()};
     await guardar();
     $("negocio").textContent = D.settings.negocio;
-    document.title = "Sierra Noble Service";
+    document.title = "Sierra Noble Services";
     aviso("Guardado","ok");
   };
   const bd=$("m-demo");
@@ -2927,7 +2999,8 @@ function abrirReportes(){
       const tv = x.ventas.reduce((s,v)=>s+v.totalCents,0);
       const tc = x.ventas.reduce((s,v)=>s+v.costTotalCents,0);
       const tp = x.pagos.reduce((s,p)=>s+p.amountCents,0);
-      const tg = x.gastos.reduce((s,g)=>s+g.amountCents,0);
+      const compras=x.gastos.filter(esCompraMercancia), operativos=x.gastos.filter(g=>!esCompraMercancia(g));
+      const tg = operativos.reduce((s,g)=>s+g.amountCents,0), tcomp=compras.reduce((s,g)=>s+g.amountCents,0);
       const saldo = x.ventas.reduce((s,v)=>s+saldoDe(v),0);
       f.cuerpo.innerHTML = `<h2 class="pregunta">Reportes</h2>
         <p class="ayuda">Filtra y exporta a Excel.</p>
@@ -2942,7 +3015,8 @@ function abrirReportes(){
           <div class="lin"><span>Utilidad bruta</span><b>${pesos(tv-tc)}</b></div>
           <div class="lin"><span>Cobrado (${x.pagos.length})</span><b>${pesos(tp)}</b></div>
           <div class="lin"><span>Por cobrar</span><b>${pesos(saldo)}</b></div>
-          <div class="lin"><span>Gastos (${x.gastos.length})</span><b>${pesos(tg)}</b></div>
+          <div class="lin"><span>Gastos operativos (${operativos.length})</span><b>${pesos(tg)}</b></div>
+          <div class="lin"><span>Compra de mercancía (${compras.length})</span><b>${pesos(tcomp)}</b></div>
           <div class="lin total"><span>Utilidad neta</span><b>${pesos(tv-tc-tg)}</b></div></div>
         <div class="bloque"><p class="bloque-t">Ventas del filtro</p><div class="scroll-x">
           <table class="tabla"><thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th class="der">Total</th><th class="der">Saldo</th></tr></thead>
@@ -2969,7 +3043,8 @@ function hojasReporte(){
   const tv = x.ventas.reduce((s,v)=>s+v.totalCents,0);
   const tc = x.ventas.reduce((s,v)=>s+v.costTotalCents,0);
   const tp = x.pagos.reduce((s,p)=>s+p.amountCents,0);
-  const tg = x.gastos.reduce((s,g)=>s+g.amountCents,0);
+  const compras=x.gastos.filter(esCompraMercancia), operativos=x.gastos.filter(g=>!esCompraMercancia(g));
+  const tg = operativos.reduce((s,g)=>s+g.amountCents,0), tcomp=compras.reduce((s,g)=>s+g.amountCents,0);
   const saldo = x.ventas.reduce((s,v)=>s+saldoDe(v),0);
 
   const resumen = [
@@ -2977,7 +3052,7 @@ function hojasReporte(){
     ["Generado", new Date()], [], ["Concepto","Importe"],
     ["Ventas", deCent(tv)], ["Costo de ventas", deCent(tc)], ["Utilidad bruta", deCent(tv-tc)],
     ["Cobrado en el periodo", deCent(tp)], ["Por cobrar de estas ventas", deCent(saldo)],
-    ["Gastos operativos", deCent(tg)], ["Utilidad neta estimada", deCent(tv-tc-tg)],
+    ["Gastos operativos", deCent(tg)], ["Compra de mercancía (salida de efectivo)",deCent(tcomp)], ["Utilidad neta estimada", deCent(tv-tc-tg)],
     ["Margen bruto", tv ? (tv-tc)/tv : 0], ["Número de ventas", x.ventas.length],
     ["Ticket promedio", x.ventas.length ? deCent(Math.round(tv/x.ventas.length)) : 0]
   ];
@@ -3174,12 +3249,12 @@ function cerrarIntro(){
   el.style.opacity="0"; setTimeout(()=>el.remove(),280);
 }
 function mostrarAccesoInicial(sesion){
+  if((location.hostname==="127.0.0.1"||location.hostname==="localhost") && new URLSearchParams(location.search).get("preview")==="1") return;
   const el=document.createElement("section"); el.id="intro-acceso";
   el.style.cssText="position:fixed;inset:0;z-index:200;background:var(--papel);display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .28s";
   const correo=(sesion&&sesion.user&&sesion.user.email)||"";
   el.innerHTML=`<div style="width:100%;max-width:420px;text-align:center">
-    <svg viewBox="0 0 100 100" aria-label="Sierra Noble" style="width:92px;height:92px;border-radius:24px;margin-bottom:18px"><rect width="100" height="100" rx="26" fill="#0c0b0a"/><path d="M8 74 L28 44 L38 57 L52 32 L64 51 L74 43 L92 74 Z" fill="#C79A3B"/><path d="M52 32 L58 41 L52 45 L46 41 Z" fill="#F4E9CE"/><path d="M28 44 L33 51 L28 54 L24 51 Z" fill="#F4E9CE"/></svg>
-    <h1 style="font-size:36px">Sierra Noble</h1><p style="color:var(--oro);font-weight:800;letter-spacing:.28em;text-transform:uppercase;margin:4px 0 28px">Service</p>
+    <h1 style="font-size:38px">Sierra Noble</h1><p style="color:var(--oro);font-weight:800;letter-spacing:.22em;text-transform:uppercase;margin:4px 0 28px">Services</p>
     ${correo?`<div class="bloque"><p class="bloque-t">Sesión iniciada</p><b>${esc(correo)}</b><p class="pista">Sincronizando tus cambios…</p></div>`:`
       <p class="ayuda">Andrés y Luis entran con su propia cuenta y comparten la misma información.</p>
       <div class="campo" style="text-align:left"><label>Correo</label><input class="txt" id="intro-mail" type="email" inputmode="email" autocomplete="username"></div>
@@ -3212,10 +3287,11 @@ async function arrancar(){
     D.products = catalogoInicial();
     await guardar();
   }
-  $("negocio").textContent = "Service";
-  document.title = "Sierra Noble Service";
+  $("negocio").textContent = "";
+  document.title = "Sierra Noble Services";
   $("a-clientes").onclick = abrirClientes;
   $("a-articulos").onclick= abrirProductos;
+  $("marca-inicio").onclick=()=>irA("inicio");
   pintarNav();
   irA("inicio");
   marcaGuardado("ok");
