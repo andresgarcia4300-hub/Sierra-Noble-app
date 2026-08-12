@@ -2332,10 +2332,18 @@ function abrirConfirmarEntrega(p, alTerminar){
 let rv=null, pasoRv=1;
 const PASOS_RV=3;
 let perVentas="mes";
+let fechaVentas=HOY(), buscarVentas="";
 
 function pintarVentas(){
-  const r=rangoPeriodo(perVentas);
-  const l=ventasActivas().filter(v=>enRango(v.soldAt,r.desde,r.hasta)).sort((a,b)=>b.soldAt.localeCompare(a.soldAt));
+  const todas=ventasActivas();
+  const primera=todas.reduce((m,v)=>!m||v.soldAt<m?v.soldAt:m,HOY());
+  const ultima=todas.reduce((m,v)=>!m||v.soldAt>m?v.soldAt:m,HOY());
+  const r=perVentas==="dia"?rangoPeriodo("rango",{desde:fechaVentas,hasta:fechaVentas})
+    :perVentas==="todo"?rangoPeriodo("rango",{desde:primera,hasta:ultima}):rangoPeriodo(perVentas);
+  const q=normaliza(buscarVentas);
+  const l=todas.filter(v=>enRango(v.soldAt,r.desde,r.hasta))
+    .filter(v=>!q||normaliza(`${v.customerNameSnapshot} ${v.folio} ${deCent(v.totalCents)} ${textoItems(v)}`).includes(q))
+    .sort((a,b)=>b.soldAt.localeCompare(a.soldAt));
   const total=l.reduce((s,v)=>s+v.totalCents,0), costo=l.reduce((s,v)=>s+v.costTotalCents,0), utilidad=total-costo;
   const cobrado=l.reduce((s,v)=>s+pagadoDe(v),0), pendiente=l.reduce((s,v)=>s+saldoDe(v),0);
   const clientes={}, productos={};
@@ -2348,7 +2356,9 @@ function pintarVentas(){
   const topProducto=Object.entries(productos).sort((a,b)=>b[1].total-a[1].total)[0];
   $("v-ventas").innerHTML=`<button class="volver-inicio" id="ven-inicio">← Inicio</button><h1 class="titulo-v">Ventas</h1>
     <p class="sub-v">Ventas rápidas y ventas generadas desde Pedidos.</p>
-    <div class="periodo">${[["hoy","Hoy"],["semana","Semana"],["mes","Mes"]].map(([k,t])=>`<button data-pv="${k}" aria-pressed="${perVentas===k}">${t}</button>`).join("")}</div>
+    <div class="periodo">${[["hoy","Hoy"],["semana","Semana"],["mes","Mes"],["todo","Todo"]].map(([k,t])=>`<button data-pv="${k}" aria-pressed="${perVentas===k}">${t}</button>`).join("")}</div>
+    <div class="rejilla2" style="margin-bottom:12px"><div class="campo" style="margin:0"><label>Calendario · ver un día</label><input class="txt" id="ven-fecha" type="date" value="${fechaVentas}"></div>
+      <div class="campo" style="margin:0"><label>Buscar en el periodo</label><input class="txt" id="ven-buscar" placeholder="Cliente, folio o monto" value="${esc(buscarVentas)}"></div></div>
     <div class="bloque oscuro"><p class="bloque-t">Ventas del periodo</p><div class="cifra nt">${pesos(total)}</div>
       <div class="lin"><span>Cobrado</span><b>${pesos(cobrado)}</b></div><div class="lin"><span>Por cobrar</span><b>${pesos(pendiente)}</b></div>
       <div class="lin"><span>Ganancia bruta</span><b>${pesos(utilidad)}</b></div><div class="lin"><span>Margen</span><b>${total?pct(utilidad,total):"—"}</b></div></div>
@@ -2365,6 +2375,8 @@ function pintarVentas(){
   $("ven-inicio").onclick=()=>irA("inicio");
   $("nueva-venta").onclick=abrirEntradaVenta;
   $("v-ventas").querySelectorAll("[data-pv]").forEach(b=>b.onclick=()=>{perVentas=b.dataset.pv;pintarVentas();});
+  $("ven-fecha").onchange=e=>{if(e.target.value){fechaVentas=e.target.value;perVentas="dia";pintarVentas();}};
+  $("ven-buscar").oninput=e=>{buscarVentas=e.target.value;pintarVentas();const n=$("ven-buscar");if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
   $("v-ventas").querySelectorAll("[data-v]").forEach(b=>b.onclick=()=>abrirDetalleVenta(b.dataset.v));
 }
 
@@ -2458,13 +2470,25 @@ async function avanzarRegistroVenta(){
   const items=renglonesDe(rv.est); if(!items.length){aviso("Agrega al menos un artículo","err");return;}
   let cli=rv.customerId?clientePorId(rv.customerId):clientePorNombre(rv.nombre);
   if(!cli)cli=altaClienteRapida(rv.nombre,rv.est.tier);
-  const base={id:null,customerId:cli?cli.id:null,customerNameSnapshot:rv.nombre.trim(),priceTier:rv.est.tier,items};
-  const venta=ventaDesde(D,base,{soldAt:rv.soldAt});
-  venta.source="quick_sale"; venta.note=rv.note; venta.updatedBy=ajustesSync().correo||"local";
-  D.sales.push(venta); descontarVenta(D,venta);
-  if(rv.paymentStatus==="paid")D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:venta.totalCents,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Venta rápida",status:"active",createdAt:ahora(),updatedAt:ahora()});
-  await guardar(); cerrarHoja(); irA("ventas");
-  aviso(`Venta ${venta.folio} registrada`,"ok");
+  let venta=rv.ventaPendiente?D.sales.find(v=>v.id===rv.ventaPendiente):null;
+  if(!venta){
+    const base={id:null,customerId:cli?cli.id:null,customerNameSnapshot:rv.nombre.trim(),priceTier:rv.est.tier,items};
+    venta=ventaDesde(D,base,{soldAt:rv.soldAt});
+    venta.source="quick_sale"; venta.note=rv.note; venta.updatedBy=ajustesSync().correo||"local";
+    D.sales.push(venta); descontarVenta(D,venta); rv.ventaPendiente=venta.id;
+    if(rv.paymentStatus==="paid")D.payments.push({id:uid("pay"),saleId:venta.id,amountCents:venta.totalCents,method:rv.paymentMethod,reference:"",paidAt:rv.soldAt,note:"Venta rápida",status:"active",createdAt:ahora(),updatedAt:ahora()});
+  }
+  const confirmar=$("rv-confirmar"); if(confirmar){confirmar.disabled=true;confirmar.textContent="Guardando…";}
+  await guardar();
+  let confirmada=false;
+  for(let intento=0;intento<6&&!confirmada;intento++){
+    if(intento)await new Promise(ok=>setTimeout(ok,250));
+    const copia=await Disco.leer(CLAVE);
+    confirmada=!!(copia&&Array.isArray(copia.sales)&&copia.sales.some(v=>v.id===venta.id));
+  }
+  if(!confirmada){if(confirmar){confirmar.disabled=false;confirmar.textContent="Confirmar venta";}aviso("La venta no pudo comprobarse. No cierres esta pantalla e intenta confirmar nuevamente.","err",9000);return;}
+  cerrarHoja(); fechaVentas=venta.soldAt; perVentas="dia"; buscarVentas=""; irA("ventas");
+  aviso(`Venta ${venta.folio} guardada y comprobada`,"ok",5000);
 }
 
 function abrirCobro(saleId){
@@ -2892,9 +2916,17 @@ function abrirCliente(id, alVolver, precarga){
    GASTOS
    ══════════════════════════════════════════════════════════ */
 let perGastos="mes";
+let fechaGastos=HOY(), buscarGastos="";
 function pintarGastos(){
-  const r = rangoPeriodo(perGastos);
-  const l = D.expenses.filter(g=>enRango(g.date,r.desde,r.hasta)).sort((a,b)=>b.date.localeCompare(a.date));
+  const todos=D.expenses||[];
+  const primero=todos.reduce((m,g)=>!m||g.date<m?g.date:m,HOY());
+  const ultimo=todos.reduce((m,g)=>!m||g.date>m?g.date:m,HOY());
+  const r = perGastos==="dia"?rangoPeriodo("rango",{desde:fechaGastos,hasta:fechaGastos})
+    :perGastos==="todo"?rangoPeriodo("rango",{desde:primero,hasta:ultimo}):rangoPeriodo(perGastos);
+  const q=normaliza(buscarGastos);
+  const l = todos.filter(g=>enRango(g.date,r.desde,r.hasta))
+    .filter(g=>!q||normaliza(`${g.concept} ${g.supplier||""} ${g.folio||""} ${deCent(g.amountCents)}`).includes(q))
+    .sort((a,b)=>b.date.localeCompare(a.date));
   const total = l.filter(g=>g.status==="active").reduce((s,g)=>s+g.amountCents,0);
   const compras=l.filter(g=>g.status==="active"&&esCompraMercancia(g)).reduce((s,g)=>s+g.amountCents,0);
   const operativos=total-compras;
@@ -2904,8 +2936,10 @@ function pintarGastos(){
   l.filter(g=>g.status==="active").forEach(g=>porCat[nom(g.categoryId)] = (porCat[nom(g.categoryId)]||0)+g.amountCents);
   $("v-gastos").innerHTML = `<button class="volver-inicio" id="gas-inicio">← Inicio</button><h1 class="titulo-v">Gastos</h1>
     <p class="sub-v">Todas las salidas, separadas para que los números cuadren.</p>
-    <div class="periodo">${[["hoy","Hoy"],["semana","Semana"],["mes","Mes"]].map(([k,t])=>
+    <div class="periodo">${[["hoy","Hoy"],["semana","Semana"],["mes","Mes"],["todo","Todo"]].map(([k,t])=>
       `<button data-pg="${k}" aria-pressed="${perGastos===k}">${t}</button>`).join("")}</div>
+    <div class="rejilla2" style="margin-bottom:12px"><div class="campo" style="margin:0"><label>Calendario · ver un día</label><input class="txt" id="gas-fecha" type="date" value="${fechaGastos}"></div>
+      <div class="campo" style="margin:0"><label>Buscar en el periodo</label><input class="txt" id="gas-buscar" placeholder="Concepto, proveedor o monto" value="${esc(buscarGastos)}"></div></div>
     <div class="bloque oscuro"><p class="bloque-t">Salidas del periodo</p><div class="cifra nt">${pesos(total)}</div>
       <div class="lin"><span>Compra de mercancía</span><b>${pesos(compras)}</b></div><div class="lin"><span>Gastos operativos</span><b>${pesos(operativos)}</b></div><div class="lin"><span>Pendiente por pagar</span><b>${pesos(porPagar)}</b></div></div>
     ${Object.keys(porCat).length?`<div class="bloque"><p class="bloque-t">Por categoría</p>
@@ -2925,6 +2959,8 @@ function pintarGastos(){
       : vacio("Sin gastos en el periodo","Registra gasolina, luz, empaques o nómina para ver la utilidad real.")}`;
   $("gas-inicio").onclick=()=>irA("inicio");
   $("v-gastos").querySelectorAll("[data-pg]").forEach(b=>b.onclick=()=>{ perGastos=b.dataset.pg; pintarGastos(); });
+  $("gas-fecha").onchange=e=>{if(e.target.value){fechaGastos=e.target.value;perGastos="dia";pintarGastos();}};
+  $("gas-buscar").oninput=e=>{buscarGastos=e.target.value;pintarGastos();const n=$("gas-buscar");if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}};
   $("nuevo-gasto").onclick = ()=>abrirGasto(null);
   $("v-gastos").querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>abrirGasto(b.dataset.g));
 }
@@ -2990,7 +3026,16 @@ function abrirGasto(id, prefill){
       g.updatedBy=ajustesSync().correo||"local"; g.updatedAt = ahora();
       if(orig) Object.assign(orig, g);
       else { g.folio = folio("expense","GAS"); D.expenses.push(g); }
-      await guardar(); cerrarHoja(); aviso("Gasto guardado","ok"); refrescar();
+      const boton=$("g-ok"); boton.disabled=true; boton.textContent="Guardando…";
+      await guardar();
+      let confirmado=false;
+      for(let intento=0;intento<6&&!confirmado;intento++){
+        if(intento)await new Promise(ok=>setTimeout(ok,250));
+        const copia=await Disco.leer(CLAVE);
+        confirmado=!!(copia&&Array.isArray(copia.expenses)&&copia.expenses.some(x=>x.id===g.id));
+      }
+      if(!confirmado){boton.disabled=false;boton.textContent="Guardar gasto";aviso("El gasto no pudo comprobarse. No cierres esta pantalla e intenta nuevamente.","err",9000);return;}
+      cerrarHoja(); fechaGastos=g.date; perGastos="dia"; buscarGastos=""; irA("gastos"); aviso("Gasto guardado y comprobado","ok");
     };
   }});
 }

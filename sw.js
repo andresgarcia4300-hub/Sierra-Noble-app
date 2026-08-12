@@ -5,7 +5,7 @@
    una versión nueva del index.html, o los teléfonos seguirán
    viendo la vieja.
    ══════════════════════════════════════════════════════════ */
-const VERSION = "sierra-noble-v8-confirmacion-venta";
+const VERSION = "sierra-noble-v9-calendario-guardado-seguro";
 const ARCHIVOS = [
   "./",
   "./index.html",
